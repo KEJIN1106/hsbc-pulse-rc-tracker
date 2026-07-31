@@ -21,20 +21,58 @@ function extractOutputText(response) {
   const chunks = [];
   for (const item of response.output || []) {
     for (const content of item.content || []) {
-      if (content.type === "output_text" && content.text) chunks.push(content.text);
-      if (typeof content.text === "string") chunks.push(content.text);
+      if (content.type === "output_text" && content.text) {
+        chunks.push(content.text);
+      } else if (typeof content.text === "string") {
+        chunks.push(content.text);
+      }
     }
   }
   return chunks.join("\n");
+}
+
+function firstJsonObject(text) {
+  const start = text.indexOf("{");
+  if (start < 0) return "";
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+
+  return "";
 }
 
 function parseJsonObject(text) {
   try {
     return JSON.parse(text);
   } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("AI did not return JSON");
-    return JSON.parse(match[0]);
+    const objectText = firstJsonObject(text);
+    if (!objectText) throw new Error("AI did not return JSON");
+    return JSON.parse(objectText);
   }
 }
 
@@ -128,6 +166,7 @@ Important:
             ],
           },
         ],
+        text: { format: { type: "json_object" } },
         max_output_tokens: 600,
       }),
     });
