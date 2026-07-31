@@ -129,6 +129,7 @@ function normalizeReceipt(receipt) {
       ? receipt.region
       : "mainland",
     category: receiptCategory(receipt),
+    diningEligible: /meituan|美团/i.test(`${receipt.merchant || ""} ${receipt.note || ""}`),
     payment: ["applepay", "unionpay", "other"].includes(receipt.payment)
       ? receipt.payment
       : "other",
@@ -201,6 +202,7 @@ Return exactly this shape:
       "merchant": "",
       "region": "mainland",
       "category": "other",
+      "diningEligible": false,
       "payment": "other",
       "confidence": 0,
       "note": ""
@@ -215,6 +217,7 @@ Fields for each transaction:
 - merchant: merchant or counterparty name. Empty string if not visible.
 - region: mainland, macau, hongkong, or overseas.
 - category: dining, shopping, travel, or other.
+- diningEligible: true only if the merchant or platform explicitly shows MEITUAN or 美团; otherwise false.
 - payment: applepay, unionpay, or other.
 - confidence: number from 0 to 1.
 - note: short reason if any field is uncertain.
@@ -223,6 +226,8 @@ Important:
 - If the image contains multiple transaction rows, return every real transaction in transactions.
 - If the image is not a payment or credit-card transaction receipt, return {"transactions":[]}.
 - MEITUAN or 美团 merchants are dining.
+- Classify category from merchant, item names, and receipt context: dining for restaurants, cafes, drinks, food delivery, and Meituan; shopping for retail, grocery, ecommerce, and supermarkets; travel for flights, hotels, trains, taxis, fuel, and transit; other if uncertain.
+- Preserve recognizable platform words such as MEITUAN or 美团 in merchant or note.
 - Prefer labels near 实付, 支付金额, 交易金额, 消费金额, Amount, Total, Paid.
 - Ignore ranges like 3-5 工作日 and identifiers like 订单号 or 卡号.`;
 
