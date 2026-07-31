@@ -1,4 +1,4 @@
-const CACHE_NAME = "pulse-rc-github-pages-v2";
+const CACHE_NAME = "pulse-rc-github-pages-v3";
 const APP_SHELL = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./app-icon.svg"];
 
 self.addEventListener("install", (event) => {

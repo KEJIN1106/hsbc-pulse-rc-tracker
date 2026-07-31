@@ -2,8 +2,7 @@ const STORAGE_KEY = "hsbc-pulse-cashback-v1";
 const BASE_RATE = 0.004;
 const RED_HOT_EXTRA_RATE = 0.02;
 const PULSE_EXTRA_RATE = 0.02;
-const DINING_BASE_RATE = 0.03;
-const DINING_PULSE_EXTRA_RATE = 0.02;
+const DINING_EXTRA_RATE = 0.03;
 
 const regionLabels = {
   mainland: "中国内地",
@@ -190,21 +189,12 @@ function analyzeRewards() {
     months.set(key, current);
   }
 
-  let diningBaseReward = 0;
-  let diningPulseExtraReward = 0;
+  let diningTotalReward = 0;
   for (const current of months.values()) {
-    current.baseReward =
-      current.total >= 1200 ? Math.min(current.dining * DINING_BASE_RATE, 60) : 0;
-    current.pulseExtraReward =
-      current.total >= 1200
-        ? Math.min(current.dining * DINING_PULSE_EXTRA_RATE, 40)
-        : 0;
-    diningBaseReward += current.baseReward;
-    diningPulseExtraReward += current.pulseExtraReward;
+    current.reward = current.total >= 1200 ? Math.min(current.dining * DINING_EXTRA_RATE, 80) : 0;
+    diningTotalReward += current.reward;
   }
-  diningBaseReward = Math.min(diningBaseReward, 360);
-  diningPulseExtraReward = Math.min(diningPulseExtraReward, 240);
-  const diningTotalReward = diningBaseReward + diningPulseExtraReward;
+  diningTotalReward = Math.min(diningTotalReward, 480);
 
   const bestPostureSpend = sorted
     .filter(
@@ -224,8 +214,6 @@ function analyzeRewards() {
     pulseSpend: pulse.used,
     pulseReward: pulse.reward,
     diningMonths: [...months.entries()].sort((a, b) => b[0].localeCompare(a[0])),
-    diningBaseReward,
-    diningPulseExtraReward,
     diningReward: diningTotalReward,
     totalSpend,
     bestPostureSpend,
@@ -364,12 +352,10 @@ function render() {
       "green",
     ),
     renderProgressCard(
-      "内地餐饮 5%",
+      "内地餐饮额外 3%",
       analysis.diningReward,
-      600,
-      `3% ${formatRc(analysis.diningBaseReward)}/360 + 2% ${formatRc(
-        analysis.diningPulseExtraReward,
-      )}/240 RC`,
+      480,
+      "月满 1,200 后计算，月封顶 80 RC",
       "amber",
     ),
     renderProgressCard(
@@ -437,7 +423,7 @@ function render() {
         <strong>${key}</strong>
         <span>总签账 ${formatAmount(month.total)}</span>
         <span>餐饮 ${formatAmount(month.dining)}</span>
-        <b>${formatRc(month.baseReward + month.pulseExtraReward)} RC</b>
+        <b>${formatRc(month.reward)} RC</b>
       </div>
     `,
         )

@@ -29,8 +29,7 @@ const STORAGE_KEY = "hsbc-pulse-cashback-v1";
 const BASE_RATE = 0.004;
 const RED_HOT_EXTRA_RATE = 0.02;
 const PULSE_EXTRA_RATE = 0.02;
-const DINING_BASE_RATE = 0.03;
-const DINING_PULSE_EXTRA_RATE = 0.02;
+const DINING_EXTRA_RATE = 0.03;
 
 const DEFAULT_SETTINGS: Settings = {
   openDate: "",
@@ -176,8 +175,7 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
     {
       total: number;
       dining: number;
-      baseReward: number;
-      pulseExtraReward: number;
+      reward: number;
     }
   >();
 
@@ -186,30 +184,21 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
     const current = months.get(key) ?? {
       total: 0,
       dining: 0,
-      baseReward: 0,
-      pulseExtraReward: 0,
+      reward: 0,
     };
     current.total += transaction.amount;
     if (isMainlandDining(transaction)) current.dining += transaction.amount;
     months.set(key, current);
   }
 
-  let diningBaseReward = 0;
-  let diningPulseExtraReward = 0;
+  let diningTotalReward = 0;
   for (const current of months.values()) {
-    current.baseReward =
-      current.total >= 1200 ? Math.min(current.dining * DINING_BASE_RATE, 60) : 0;
-    current.pulseExtraReward =
-      current.total >= 1200
-        ? Math.min(current.dining * DINING_PULSE_EXTRA_RATE, 40)
-        : 0;
-    diningBaseReward += current.baseReward;
-    diningPulseExtraReward += current.pulseExtraReward;
+    current.reward =
+      current.total >= 1200 ? Math.min(current.dining * DINING_EXTRA_RATE, 80) : 0;
+    diningTotalReward += current.reward;
   }
 
-  diningBaseReward = Math.min(diningBaseReward, 360);
-  diningPulseExtraReward = Math.min(diningPulseExtraReward, 240);
-  const diningTotalReward = diningBaseReward + diningPulseExtraReward;
+  diningTotalReward = Math.min(diningTotalReward, 480);
 
   const bestPostureSpend = sorted
     .filter(
@@ -229,8 +218,6 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
     pulseSpend: pulse.used,
     pulseReward: pulse.reward,
     diningMonths: [...months.entries()].sort((a, b) => b[0].localeCompare(a[0])),
-    diningBaseReward,
-    diningPulseExtraReward,
     diningReward: diningTotalReward,
     totalSpend,
     bestPostureSpend,
@@ -526,7 +513,7 @@ export default function Home() {
                     updateInput("diningEligible", event.target.checked)
                   }
                 />
-                <span>这一笔参与内地餐饮 5%</span>
+                <span>这一笔参与内地餐饮额外 3%</span>
               </label>
             </div>
 
@@ -607,12 +594,10 @@ export default function Home() {
             tone="green"
           />
           <ProgressCard
-            label="内地餐饮 5%"
+            label="内地餐饮额外 3%"
             value={analysis.diningReward}
-            max={600}
-            detail={`3% ${formatRc(analysis.diningBaseReward)}/360 + 2% ${formatRc(
-              analysis.diningPulseExtraReward,
-            )}/240 RC`}
+            max={480}
+            detail={`月满 1,200 后计算，月封顶 80 RC`}
             tone="amber"
           />
           <ProgressCard
@@ -637,7 +622,7 @@ export default function Home() {
             label="迎新奖励"
             value={`${formatRc(analysis.welcomeBonus)} RC`}
           />
-          <Metric label="内地餐饮 5%" value={`${formatRc(analysis.diningReward)} RC`} />
+          <Metric label="内地餐饮额外 3%" value={`${formatRc(analysis.diningReward)} RC`} />
           <Metric label="最佳姿势消费" value={formatAmount(analysis.bestPostureSpend)} />
         </section>
 
@@ -697,7 +682,7 @@ export default function Home() {
               <p className="eyebrow">Dining</p>
               <h2>每月餐饮上限</h2>
             </div>
-            <span className="cap-badge">3% 月60/总360 + 2% 月40/总240</span>
+            <span className="cap-badge">月满1,200，3% 月80/总480</span>
           </div>
           <div className="month-grid">
             {analysis.diningMonths.length === 0 ? (
@@ -711,7 +696,7 @@ export default function Home() {
                   <strong>{key}</strong>
                   <span>总签账 {formatAmount(month.total)}</span>
                   <span>餐饮 {formatAmount(month.dining)}</span>
-                  <b>{formatRc(month.baseReward + month.pulseExtraReward)} RC</b>
+                  <b>{formatRc(month.reward)} RC</b>
                 </div>
               ))
             )}
