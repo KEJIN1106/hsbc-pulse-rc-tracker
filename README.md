@@ -10,17 +10,21 @@
 - 数据保存在当前设备浏览器的 localStorage，支持复制 JSON 备份。
 - 支持 iPhone Safari 添加到主屏幕，并注册离线缓存。
 
-## GitHub Pages
+## 手机使用
 
-`docs/` 是可直接发布到 GitHub Pages 的静态版本，不需要服务器。
+部署到 GitHub Pages 后，用 iPhone Safari 打开页面，点分享按钮，选择“添加到主屏幕”。消费记录会保存在当前手机浏览器本地。
 
-在 GitHub 仓库中进入 Settings → Pages，选择：
+## GitHub Pages 设置
+
+仓库进入 Settings → Pages，选择：
 
 - Source: Deploy from a branch
-- Branch: `master` 或 `main`
+- Branch: `main`
 - Folder: `/docs`
 
-保存后，打开 GitHub Pages 给出的链接，在 iPhone Safari 中点分享按钮并选择“添加到主屏幕”。
+保存后页面地址通常是：
+
+`https://kejin1106.github.io/hsbc-pulse-rc-tracker/`
 
 ## 本地运行
 
@@ -36,4 +40,4 @@ npm run build
 npm test
 ```
 
-返现计算按当前录入规则实现，HKD/RMB 按 1:1 记录；最终到账以汇丰账单和活动条款为准。
+HKD/RMB 在工具中按 1:1 记录；最终到账以汇丰账单和活动条款为准。
