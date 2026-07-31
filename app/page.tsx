@@ -35,6 +35,18 @@ type TesseractApi = {
   ) => Promise<{ data: { text: string } }>;
 };
 
+type RecognizedReceipt = {
+  date: string;
+  amount: number;
+  currency: "HKD" | "RMB";
+  merchant: string;
+  payment: PaymentMethod;
+  region: Region;
+  category: Category;
+  confidence: number;
+  note: string;
+};
+
 declare global {
   interface Window {
     Tesseract?: TesseractApi;
@@ -358,7 +370,7 @@ function parseReceiptText(text: string) {
       ? "unionpay"
       : "other";
   const category: Category =
-    /(餐|饭|饮|咖啡|茶|火锅|酒|restaurant|cafe|food|kfc|mcdonald|starbucks|海底捞|麦当劳|肯德基)/i.test(
+    /(餐|饭|饮|咖啡|茶|火锅|酒|restaurant|cafe|food|kfc|mcdonald|starbucks|meituan|美团|海底捞|麦当劳|肯德基)/i.test(
       lower,
     )
       ? "dining"
@@ -393,12 +405,16 @@ function fileToDataUrl(file: File) {
   });
 }
 
-function normalizeAiReceipt(raw: unknown) {
-  const container = raw as {
-    result?: Record<string, unknown>;
-    receipt?: Record<string, unknown>;
-  };
-  const data = container.result || container.receipt || (raw as Record<string, unknown>);
+function categoryFromAiData(data: Record<string, unknown>) {
+  const source = `${data.merchant || ""} ${data.note || ""}`.toLowerCase();
+  if (/meituan|美团/.test(source)) return "dining";
+  return ["dining", "shopping", "travel", "other"].includes(String(data.category))
+    ? (data.category as Category)
+    : "other";
+}
+
+function normalizeAiReceiptItem(data: Record<string, unknown> | null | undefined) {
+  if (!data) return null;
   const amount = Number(data?.amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
@@ -409,16 +425,35 @@ function normalizeAiReceipt(raw: unknown) {
     region: ["mainland", "macau", "hongkong", "overseas"].includes(String(data.region))
       ? (data.region as Region)
       : "mainland",
-    category: ["dining", "shopping", "travel", "other"].includes(String(data.category))
-      ? (data.category as Category)
-      : "other",
+    category: categoryFromAiData(data),
     payment: ["applepay", "unionpay", "other"].includes(String(data.payment))
       ? (data.payment as PaymentMethod)
       : "other",
     merchant: typeof data.merchant === "string" ? data.merchant : "",
     confidence: Number(data.confidence || 0),
     note: typeof data.note === "string" ? data.note : "",
+  } satisfies RecognizedReceipt;
+}
+
+function normalizeAiReceipts(raw: unknown) {
+  const container = raw as {
+    results?: unknown[];
+    transactions?: unknown[];
+    receipts?: unknown[];
+    result?: Record<string, unknown>;
+    receipt?: Record<string, unknown>;
   };
+  const list = Array.isArray(container?.results)
+    ? container.results
+    : Array.isArray(container?.transactions)
+      ? container.transactions
+      : Array.isArray(container?.receipts)
+        ? container.receipts
+        : [container?.result || container?.receipt || raw];
+
+  return list
+    .map((item) => normalizeAiReceiptItem(item as Record<string, unknown>))
+    .filter((item): item is RecognizedReceipt => Boolean(item));
 }
 
 export default function Home() {
@@ -579,6 +614,32 @@ export default function Home() {
     }));
   }
 
+  function transactionFromReceipt(
+    parsed: {
+      date: string;
+      amount: number;
+      currency: "HKD" | "RMB";
+      merchant: string;
+      payment: PaymentMethod;
+      region: Region;
+      category: Category;
+    },
+    sourceLabel: string,
+  ): Transaction {
+    return {
+      id: crypto.randomUUID(),
+      date: parsed.date || input.date || todayString(),
+      amount: parsed.amount,
+      currency: parsed.currency,
+      region: parsed.region,
+      category: parsed.category,
+      payment: parsed.payment,
+      redHotEligible: input.redHotEligible,
+      diningEligible: input.diningEligible,
+      note: parsed.merchant ? `${sourceLabel}：${parsed.merchant}` : sourceLabel,
+    };
+  }
+
   async function scanReceiptImage(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -646,13 +707,37 @@ export default function Home() {
       if (!response.ok) {
         throw new Error(payload?.error || `AI 接口错误 ${response.status}`);
       }
-      const parsed = normalizeAiReceipt(payload);
-      if (!parsed) throw new Error("AI 没有返回有效金额。");
+      const parsedList = normalizeAiReceipts(payload);
+      if (!parsedList.length) throw new Error("AI 没有返回有效金额。");
 
-      prefillReceipt(parsed, "AI识别");
-      const confidence = parsed.confidence ? `，置信度 ${Math.round(parsed.confidence * 100)}%` : "";
-      setScanStatus(`AI 已预填：${parsed.currency} ${formatAmount(parsed.amount)}${confidence}`);
-      setNotice("AI 已预填表单，请检查日期、金额、类别和支付方式后再保存。");
+      if (parsedList.length === 1) {
+        const parsed = parsedList[0];
+        prefillReceipt(parsed, "AI识别");
+        const confidence = parsed.confidence
+          ? `，置信度 ${Math.round(parsed.confidence * 100)}%`
+          : "";
+        setScanStatus(`AI 已预填：${parsed.currency} ${formatAmount(parsed.amount)}${confidence}`);
+        setNotice("AI 已预填表单，请检查日期、金额、类别和支付方式后再保存。");
+        return;
+      }
+
+      const total = parsedList.reduce((sum, item) => sum + item.amount, 0);
+      const accepted = window.confirm(
+        `AI 识别到 ${parsedList.length} 条交易，合计 ${formatAmount(total)}。是否全部加入记录？`,
+      );
+      if (!accepted) {
+        prefillReceipt(parsedList[0], "AI识别");
+        setScanStatus(`已先预填第 1 条，共 ${parsedList.length} 条。`);
+        setNotice("你取消了批量加入；已把第一条预填到表单。");
+        return;
+      }
+
+      setTransactions((current) => [
+        ...parsedList.map((item) => transactionFromReceipt(item, "AI识别")),
+        ...current,
+      ]);
+      setScanStatus(`已加入 ${parsedList.length} 条 AI 识别记录，合计 ${formatAmount(total)}。`);
+      setNotice("批量加入完成，请在记录列表检查每一笔。");
     } catch (error) {
       setScanStatus(error instanceof Error ? error.message : "AI 识别失败。");
       setNotice("AI 识别失败，可以改用本地 OCR 或手动录入。");

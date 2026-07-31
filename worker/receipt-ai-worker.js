@@ -76,6 +76,14 @@ function parseJsonObject(text) {
   }
 }
 
+function receiptCategory(receipt) {
+  const source = `${receipt.merchant || ""} ${receipt.note || ""}`.toLowerCase();
+  if (/meituan|美团/.test(source)) return "dining";
+  return ["dining", "shopping", "travel", "other"].includes(receipt.category)
+    ? receipt.category
+    : "other";
+}
+
 function normalizeReceipt(receipt) {
   const amount = Number(receipt.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -90,15 +98,33 @@ function normalizeReceipt(receipt) {
     region: ["mainland", "macau", "hongkong", "overseas"].includes(receipt.region)
       ? receipt.region
       : "mainland",
-    category: ["dining", "shopping", "travel", "other"].includes(receipt.category)
-      ? receipt.category
-      : "other",
+    category: receiptCategory(receipt),
     payment: ["applepay", "unionpay", "other"].includes(receipt.payment)
       ? receipt.payment
       : "other",
     confidence: Math.max(0, Math.min(Number(receipt.confidence || 0), 1)),
     note: typeof receipt.note === "string" ? receipt.note : "",
   };
+}
+
+function normalizeReceipts(payload) {
+  const source = Array.isArray(payload.transactions)
+    ? payload.transactions
+    : Array.isArray(payload.receipts)
+      ? payload.receipts
+      : Array.isArray(payload.results)
+        ? payload.results
+        : [payload];
+
+  return source
+    .map((receipt) => {
+      try {
+        return normalizeReceipt(receipt);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
 }
 
 export default {
@@ -130,10 +156,27 @@ export default {
       return json({ error: "Image is too large. Crop or compress it first." }, 413);
     }
 
-    const prompt = `You extract one credit-card, mobile-wallet, or payment receipt transaction from an image.
+    const prompt = `You extract all credit-card, mobile-wallet, or payment receipt transactions from an image.
 Return only valid JSON, no markdown.
 
-Fields:
+Return exactly this shape:
+{
+  "transactions": [
+    {
+      "date": "YYYY-MM-DD",
+      "amount": 0,
+      "currency": "RMB",
+      "merchant": "",
+      "region": "mainland",
+      "category": "other",
+      "payment": "other",
+      "confidence": 0,
+      "note": ""
+    }
+  ]
+}
+
+Fields for each transaction:
 - date: ISO date YYYY-MM-DD. Empty string if not visible.
 - amount: transaction amount as a number. Do not use order numbers, card numbers, points, delivery days, balances, discounts, or phone numbers.
 - currency: RMB or HKD.
@@ -145,7 +188,9 @@ Fields:
 - note: short reason if any field is uncertain.
 
 Important:
-- If the image is not a payment or credit-card transaction receipt, set amount to 0 and confidence below 0.2.
+- If the image contains multiple transaction rows, return every real transaction in transactions.
+- If the image is not a payment or credit-card transaction receipt, return {"transactions":[]}.
+- MEITUAN or 美团 merchants are dining.
 - Prefer labels near 实付, 支付金额, 交易金额, 消费金额, Amount, Total, Paid.
 - Ignore ranges like 3-5 工作日 and identifiers like 订单号 or 卡号.`;
 
@@ -184,8 +229,9 @@ Important:
     }
 
     try {
-      const receipt = normalizeReceipt(parseJsonObject(extractOutputText(openaiJson)));
-      return json({ ok: true, result: receipt });
+      const receipts = normalizeReceipts(parseJsonObject(extractOutputText(openaiJson)));
+      if (!receipts.length) throw new Error("No valid amount found");
+      return json({ ok: true, result: receipts[0], results: receipts });
     } catch (error) {
       return json(
         {

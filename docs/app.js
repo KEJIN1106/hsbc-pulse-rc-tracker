@@ -291,8 +291,15 @@ function fileToDataUrl(file) {
   });
 }
 
-function normalizeAiReceipt(raw) {
-  const data = raw?.result || raw?.receipt || raw;
+function categoryFromAiData(data) {
+  const source = `${data?.merchant || ""} ${data?.note || ""}`.toLowerCase();
+  if (/meituan|美团/.test(source)) return "dining";
+  return ["dining", "shopping", "travel", "other"].includes(data?.category)
+    ? data.category
+    : "other";
+}
+
+function normalizeAiReceiptItem(data) {
   const amount = Number(data?.amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
 
@@ -303,14 +310,24 @@ function normalizeAiReceipt(raw) {
     region: ["mainland", "macau", "hongkong", "overseas"].includes(data.region)
       ? data.region
       : "mainland",
-    category: ["dining", "shopping", "travel", "other"].includes(data.category)
-      ? data.category
-      : "other",
+    category: categoryFromAiData(data),
     payment: ["applepay", "unionpay", "other"].includes(data.payment) ? data.payment : "other",
     merchant: typeof data.merchant === "string" ? data.merchant : "",
     confidence: Number(data.confidence || 0),
     note: typeof data.note === "string" ? data.note : "",
   };
+}
+
+function normalizeAiReceipts(raw) {
+  const list = Array.isArray(raw?.results)
+    ? raw.results
+    : Array.isArray(raw?.transactions)
+      ? raw.transactions
+      : Array.isArray(raw?.receipts)
+        ? raw.receipts
+        : [raw?.result || raw?.receipt || raw];
+
+  return list.map(normalizeAiReceiptItem).filter(Boolean);
 }
 
 function prefillReceipt(parsed, sourceLabel) {
@@ -325,6 +342,21 @@ function prefillReceipt(parsed, sourceLabel) {
     diningEligible: el.transactionDiningEligible.checked,
     note: parsed.merchant ? `${sourceLabel}：${parsed.merchant}` : sourceLabel,
   });
+}
+
+function transactionFromReceipt(parsed, sourceLabel) {
+  return {
+    id: makeId(),
+    date: parsed.date || el.date.value || todayString(),
+    amount: parsed.amount,
+    currency: parsed.currency,
+    region: parsed.region,
+    category: parsed.category,
+    payment: parsed.payment,
+    redHotEligible: el.redHotEligible.checked,
+    diningEligible: el.transactionDiningEligible.checked,
+    note: parsed.merchant ? `${sourceLabel}：${parsed.merchant}` : sourceLabel,
+  };
 }
 
 function normalizeOcrText(text) {
@@ -414,7 +446,7 @@ function parseReceiptText(text) {
       ? "unionpay"
       : "other";
   const category =
-    /(餐|饭|饮|咖啡|茶|火锅|酒|restaurant|cafe|food|kfc|mcdonald|starbucks|海底捞|麦当劳|肯德基)/i.test(
+    /(餐|饭|饮|咖啡|茶|火锅|酒|restaurant|cafe|food|kfc|mcdonald|starbucks|meituan|美团|海底捞|麦当劳|肯德基)/i.test(
       lower,
     )
       ? "dining"
@@ -503,13 +535,37 @@ async function scanReceiptWithAi(file) {
     if (!response.ok) {
       throw new Error(payload?.error || `AI 接口错误 ${response.status}`);
     }
-    const parsed = normalizeAiReceipt(payload);
-    if (!parsed) throw new Error("AI 没有返回有效金额。");
+    const parsedList = normalizeAiReceipts(payload);
+    if (!parsedList.length) throw new Error("AI 没有返回有效金额。");
 
-    prefillReceipt(parsed, "AI识别");
-    const confidence = parsed.confidence ? `，置信度 ${Math.round(parsed.confidence * 100)}%` : "";
-    setScanStatus(`AI 已预填：${parsed.currency} ${formatAmount(parsed.amount)}${confidence}`);
-    setNotice("AI 已预填表单，请检查日期、金额、类别和支付方式后再保存。");
+    if (parsedList.length === 1) {
+      const parsed = parsedList[0];
+      prefillReceipt(parsed, "AI识别");
+      const confidence = parsed.confidence ? `，置信度 ${Math.round(parsed.confidence * 100)}%` : "";
+      setScanStatus(`AI 已预填：${parsed.currency} ${formatAmount(parsed.amount)}${confidence}`);
+      setNotice("AI 已预填表单，请检查日期、金额、类别和支付方式后再保存。");
+      return;
+    }
+
+    const total = parsedList.reduce((sum, item) => sum + item.amount, 0);
+    const accepted = window.confirm(
+      `AI 识别到 ${parsedList.length} 条交易，合计 ${formatAmount(total)}。是否全部加入记录？`,
+    );
+    if (!accepted) {
+      prefillReceipt(parsedList[0], "AI识别");
+      setScanStatus(`已先预填第 1 条，共 ${parsedList.length} 条。`);
+      setNotice("你取消了批量加入；已把第一条预填到表单。");
+      return;
+    }
+
+    state.transactions = [
+      ...parsedList.map((item) => transactionFromReceipt(item, "AI识别")),
+      ...state.transactions,
+    ];
+    save();
+    render();
+    setScanStatus(`已加入 ${parsedList.length} 条 AI 识别记录，合计 ${formatAmount(total)}。`);
+    setNotice("批量加入完成，请在记录列表检查每一笔。");
   } catch (error) {
     setScanStatus(error instanceof Error ? error.message : "AI 识别失败。");
     setNotice("AI 识别失败，可以改用本地 OCR 或手动录入。");
