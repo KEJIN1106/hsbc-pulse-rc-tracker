@@ -89,7 +89,7 @@ function monthKey(date: string) {
 
 function formatAmount(value: number) {
   return value.toLocaleString("zh-HK", {
-    maximumFractionDigits: 0,
+    maximumFractionDigits: 2,
   });
 }
 

@@ -116,7 +116,7 @@ function monthKey(date) {
 }
 
 function formatAmount(value) {
-  return Number(value || 0).toLocaleString("zh-HK", { maximumFractionDigits: 0 });
+  return Number(value || 0).toLocaleString("zh-HK", { maximumFractionDigits: 2 });
 }
 
 function formatRc(value) {
