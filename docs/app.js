@@ -311,6 +311,7 @@ function normalizeAiReceiptItem(data) {
       ? data.region
       : "mainland",
     category: categoryFromAiData(data),
+    diningEligible: /meituan|美团/i.test(`${data?.merchant || ""} ${data?.note || ""}`),
     payment: ["applepay", "unionpay", "other"].includes(data.payment) ? data.payment : "other",
     merchant: typeof data.merchant === "string" ? data.merchant : "",
     confidence: Number(data.confidence || 0),
@@ -339,7 +340,10 @@ function prefillReceipt(parsed, sourceLabel) {
     category: parsed.category,
     payment: parsed.payment,
     redHotEligible: el.redHotEligible.checked,
-    diningEligible: el.transactionDiningEligible.checked,
+    diningEligible:
+      typeof parsed.diningEligible === "boolean"
+        ? parsed.diningEligible
+        : el.transactionDiningEligible.checked,
     note: parsed.merchant ? `${sourceLabel}：${parsed.merchant}` : sourceLabel,
   });
 }
@@ -354,7 +358,10 @@ function transactionFromReceipt(parsed, sourceLabel) {
     category: parsed.category,
     payment: parsed.payment,
     redHotEligible: el.redHotEligible.checked,
-    diningEligible: el.transactionDiningEligible.checked,
+    diningEligible:
+      typeof parsed.diningEligible === "boolean"
+        ? parsed.diningEligible
+        : el.transactionDiningEligible.checked,
     note: parsed.merchant ? `${sourceLabel}：${parsed.merchant}` : sourceLabel,
   };
 }
@@ -432,6 +439,7 @@ function parseReceiptText(text) {
   const normalized = normalizeOcrText(text);
   const lower = normalized.toLowerCase();
   const merchant = extractMerchantFromText(normalized);
+  const isMeituan = /meituan|美团/i.test(`${normalized} ${merchant}`);
   const date = extractDateFromText(normalized);
   const amount = extractAmountFromText(normalized);
   const currency = /hkd|hk\$|港币/i.test(normalized) ? "HKD" : "RMB";
@@ -452,7 +460,7 @@ function parseReceiptText(text) {
       ? "dining"
       : "other";
 
-  return { amount, currency, date, merchant, payment, region, category };
+  return { amount, currency, date, merchant, payment, region, category, diningEligible: isMeituan };
 }
 
 function loadTesseract() {

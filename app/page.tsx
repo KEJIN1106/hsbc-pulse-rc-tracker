@@ -43,6 +43,7 @@ type RecognizedReceipt = {
   payment: PaymentMethod;
   region: Region;
   category: Category;
+  diningEligible: boolean;
   confidence: number;
   note: string;
 };
@@ -356,6 +357,7 @@ function parseReceiptText(text: string) {
   const normalized = normalizeOcrText(text);
   const lower = normalized.toLowerCase();
   const merchant = extractMerchantFromText(normalized);
+  const isMeituan = /meituan|美团/i.test(`${normalized} ${merchant}`);
   const date = extractDateFromText(normalized);
   const amount = extractAmountFromText(normalized);
   const currency: "HKD" | "RMB" = /hkd|hk\$|港币/i.test(normalized) ? "HKD" : "RMB";
@@ -376,7 +378,7 @@ function parseReceiptText(text: string) {
       ? "dining"
       : "other";
 
-  return { amount, currency, date, merchant, payment, region, category };
+  return { amount, currency, date, merchant, payment, region, category, diningEligible: isMeituan };
 }
 
 function loadTesseract() {
@@ -426,6 +428,7 @@ function normalizeAiReceiptItem(data: Record<string, unknown> | null | undefined
       ? (data.region as Region)
       : "mainland",
     category: categoryFromAiData(data),
+    diningEligible: /meituan|美团/i.test(`${data.merchant || ""} ${data.note || ""}`),
     payment: ["applepay", "unionpay", "other"].includes(String(data.payment))
       ? (data.payment as PaymentMethod)
       : "other",
@@ -599,6 +602,7 @@ export default function Home() {
       payment: PaymentMethod;
       region: Region;
       category: Category;
+      diningEligible?: boolean;
     },
     sourceLabel: string,
   ) {
@@ -610,6 +614,8 @@ export default function Home() {
       region: parsed.region,
       category: parsed.category,
       payment: parsed.payment,
+      diningEligible:
+        typeof parsed.diningEligible === "boolean" ? parsed.diningEligible : current.diningEligible,
       note: parsed.merchant ? `${sourceLabel}：${parsed.merchant}` : sourceLabel,
     }));
   }
@@ -623,6 +629,7 @@ export default function Home() {
       payment: PaymentMethod;
       region: Region;
       category: Category;
+      diningEligible?: boolean;
     },
     sourceLabel: string,
   ): Transaction {
@@ -635,7 +642,8 @@ export default function Home() {
       category: parsed.category,
       payment: parsed.payment,
       redHotEligible: input.redHotEligible,
-      diningEligible: input.diningEligible,
+      diningEligible:
+        typeof parsed.diningEligible === "boolean" ? parsed.diningEligible : input.diningEligible,
       note: parsed.merchant ? `${sourceLabel}：${parsed.merchant}` : sourceLabel,
     };
   }
