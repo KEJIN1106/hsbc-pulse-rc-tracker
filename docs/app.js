@@ -191,9 +191,18 @@ function analyzeRewards() {
   );
   const totalSpend = sorted.reduce((sum, transaction) => sum + transaction.amount, 0);
   const baseReward = totalSpend * BASE_RATE;
-  const welcomeSpend = sorted
-    .filter((transaction) => isWithinWelcomeWindow(transaction.date, state.settings.openDate))
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const welcomeTransactions = sorted.filter((transaction) =>
+    isWithinWelcomeWindow(transaction.date, state.settings.openDate),
+  );
+  const welcomeSpendByCurrency = {
+    HKD: welcomeTransactions
+      .filter((transaction) => transaction.currency === "HKD")
+      .reduce((sum, transaction) => sum + transaction.amount, 0),
+    RMB: welcomeTransactions
+      .filter((transaction) => transaction.currency === "RMB")
+      .reduce((sum, transaction) => sum + transaction.amount, 0),
+  };
+  const welcomeSpend = welcomeSpendByCurrency.HKD + welcomeSpendByCurrency.RMB;
   const welcomeReached = welcomeSpend >= 8000;
   const welcomeBonus = welcomeReached ? 1800 : 0;
   const redHot = allocateCappedRewards(sorted, canUseRedHot, 100000, RED_HOT_EXTRA_RATE);
@@ -227,6 +236,7 @@ function analyzeRewards() {
   return {
     baseReward,
     welcomeSpend,
+    welcomeSpendByCurrency,
     welcomeReached,
     welcomeBonus,
     redHotSpend: redHot.used,
@@ -675,12 +685,16 @@ function render() {
 
   el.progressGrid.innerHTML = [
     renderProgressCard(
-      "迎新 8,000",
+      "迎新 8,000 HKD/RMB",
       analysis.welcomeSpend,
       8000,
       analysis.welcomeReached
-        ? "已达标，预计 1,800 RC"
-        : `还差 ${formatAmount(Math.max(8000 - analysis.welcomeSpend, 0))}`,
+        ? `已达标，HKD ${formatAmount(analysis.welcomeSpendByCurrency.HKD)} + RMB ${formatAmount(
+            analysis.welcomeSpendByCurrency.RMB,
+          )}`
+        : `HKD ${formatAmount(analysis.welcomeSpendByCurrency.HKD)} + RMB ${formatAmount(
+            analysis.welcomeSpendByCurrency.RMB,
+          )}；还差 ${formatAmount(Math.max(8000 - analysis.welcomeSpend, 0))}`,
       "green",
     ),
     renderProgressCard(

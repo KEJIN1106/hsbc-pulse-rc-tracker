@@ -198,9 +198,18 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
 
   const totalSpend = sorted.reduce((sum, transaction) => sum + transaction.amount, 0);
   const baseReward = totalSpend * BASE_RATE;
-  const welcomeSpend = sorted
-    .filter((transaction) => isWithinWelcomeWindow(transaction.date, settings.openDate))
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
+  const welcomeTransactions = sorted.filter((transaction) =>
+    isWithinWelcomeWindow(transaction.date, settings.openDate),
+  );
+  const welcomeSpendByCurrency = {
+    HKD: welcomeTransactions
+      .filter((transaction) => transaction.currency === "HKD")
+      .reduce((sum, transaction) => sum + transaction.amount, 0),
+    RMB: welcomeTransactions
+      .filter((transaction) => transaction.currency === "RMB")
+      .reduce((sum, transaction) => sum + transaction.amount, 0),
+  };
+  const welcomeSpend = welcomeSpendByCurrency.HKD + welcomeSpendByCurrency.RMB;
   const welcomeReached = welcomeSpend >= 8000;
   const welcomeBonus = welcomeReached ? 1800 : 0;
 
@@ -254,6 +263,7 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
   return {
     baseReward,
     welcomeSpend,
+    welcomeSpendByCurrency,
     welcomeReached,
     welcomeBonus,
     redHotSpend: redHot.used,
@@ -1029,13 +1039,17 @@ export default function Home() {
 
         <section className="progress-grid" aria-label="返现进度">
           <ProgressCard
-            label="迎新 8,000"
+            label="迎新 8,000 HKD/RMB"
             value={analysis.welcomeSpend}
             max={8000}
             detail={
               analysis.welcomeReached
-                ? "已达标，预计 1,800 RC"
-                : `还差 ${formatAmount(Math.max(8000 - analysis.welcomeSpend, 0))}`
+                ? `已达标，HKD ${formatAmount(analysis.welcomeSpendByCurrency.HKD)} + RMB ${formatAmount(
+                    analysis.welcomeSpendByCurrency.RMB,
+                  )}`
+                : `HKD ${formatAmount(analysis.welcomeSpendByCurrency.HKD)} + RMB ${formatAmount(
+                    analysis.welcomeSpendByCurrency.RMB,
+                  )}；还差 ${formatAmount(Math.max(8000 - analysis.welcomeSpend, 0))}`
             }
             tone="green"
           />
