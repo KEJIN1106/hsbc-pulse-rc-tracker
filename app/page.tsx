@@ -560,12 +560,9 @@ export default function Home() {
     return sorted.filter((transaction) => transaction.category === filter);
   }, [filter, settings.openDate, transactions]);
 
-  const currentMonth = monthKey(todayString());
-  const currentDiningMonth = analysis.diningMonths.find(([key]) => key === currentMonth)?.[1] ?? {
-    total: 0,
-    dining: 0,
-    reward: 0,
-  };
+  const diningThresholdMonths = analysis.diningMonths.filter(
+    ([, month]) => month.total >= DINING_MONTHLY_THRESHOLD,
+  ).length;
   const welcomeDeadline = settings.openDate ? datePlusDays(settings.openDate, 59) : "";
   const daysLeft = welcomeDeadline ? daysBetween(todayString(), welcomeDeadline) : null;
 
@@ -1035,20 +1032,12 @@ export default function Home() {
                     : "用于判断开卡后 60 天。"}
                 </span>
               </div>
-              <div
-                className={
-                  currentDiningMonth.total >= DINING_MONTHLY_THRESHOLD ? "task done" : "task"
-                }
-              >
-                <strong>本月内地餐饮门槛</strong>
+              <div className={diningThresholdMonths > 0 ? "task done" : "task"}>
+                <strong>内地餐饮门槛</strong>
                 <span>
-                  {currentDiningMonth.total >= DINING_MONTHLY_THRESHOLD
-                    ? `总签账 ${formatAmount(currentDiningMonth.total)} 已达门槛，餐饮 ${formatAmount(
-                        currentDiningMonth.dining,
-                      )}，已估 ${formatRc(currentDiningMonth.reward)} RC。`
-                    : `本月总签账 ${formatAmount(currentDiningMonth.total)}，还差 ${formatAmount(
-                        Math.max(DINING_MONTHLY_THRESHOLD - currentDiningMonth.total, 0),
-                      )} 解锁；达标后当月餐饮从第一元算 3%。`}
+                  {diningThresholdMonths > 0
+                    ? `已有 ${diningThresholdMonths} / 6 个月达 HKD 1,200 门槛，按账单月份自动统计。`
+                    : "7-12 月每月满 HKD 1,200 后，当月餐饮从第一元算 3%。"}
                 </span>
               </div>
               <div className={analysis.pulseSpend < 80000 ? "task" : "task done"}>
@@ -1084,20 +1073,7 @@ export default function Home() {
             valueLabel={`${formatRc(analysis.diningReward)} / ${formatRc(
               DINING_PROMO_REWARD_CAP,
             )} RC`}
-            detail={
-              <div className="dining-reward-detail">
-                <span className="dining-current">
-                  {currentMonth}：{formatRc(currentDiningMonth.reward)} RC
-                </span>
-                {analysis.diningMonths
-                  .filter(([key]) => key !== currentMonth)
-                  .map(([key, month]) => (
-                    <span className="dining-other" key={key}>
-                      {key}：{formatRc(month.reward)} RC
-                    </span>
-                  ))}
-              </div>
-            }
+            detail={<DiningMonthProgress months={analysis.diningMonths} />}
             tone="amber"
           />
           <ProgressCard
@@ -1241,6 +1217,35 @@ function ProgressCard({
       <small>{detail}</small>
     </article>
   );
+}
+
+function DiningMonthProgress({
+  months,
+}: {
+  months: Array<[string, { total: number; dining: number; reward: number }]>;
+}) {
+  return (
+    <div className="dining-month-progress">
+      {months.map(([key, month]) => (
+        <div className="dining-month-row" key={key}>
+          <span className="dining-month-label">{formatMonthLabel(key)}</span>
+          <div className="dining-month-meter" aria-label={`${key} ${formatRc(month.reward)} / 80 RC`}>
+            <div className="dining-month-track" aria-hidden="true">
+              <span style={{ width: `${progressPercent(month.reward, DINING_MONTHLY_REWARD_CAP)}%` }} />
+            </div>
+            <span className="dining-month-value">
+              {formatRc(month.reward)} / {formatRc(DINING_MONTHLY_REWARD_CAP)} RC
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatMonthLabel(key: string) {
+  const month = Number(key.slice(5, 7));
+  return Number.isFinite(month) ? `${month}月` : key;
 }
 
 function Metric({ label, value }: { label: string; value: string }) {

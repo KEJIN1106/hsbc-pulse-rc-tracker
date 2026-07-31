@@ -647,18 +647,29 @@ function renderProgressCard(label, value, max, detail, tone) {
   `;
 }
 
-function renderDiningRewardDetail(analysis, currentMonth, currentDiningMonth) {
-  const otherMonths = analysis.diningMonths
-    .filter(([key]) => key !== currentMonth)
-    .map(
-      ([key, month]) =>
-        `<span class="dining-other">${key}：${formatRc(month.reward)} RC</span>`,
-    )
-    .join("");
+function formatMonthLabel(key) {
+  const month = Number(key.slice(5, 7));
+  return Number.isFinite(month) ? `${month}月` : key;
+}
 
-  return `<div class="dining-reward-detail"><span class="dining-current">${currentMonth}：${formatRc(
-    currentDiningMonth.reward,
-  )} RC</span>${otherMonths}</div>`;
+function renderDiningRewardDetail(analysis) {
+  return `<div class="dining-month-progress">${analysis.diningMonths
+    .map(
+      ([key, month]) => `
+        <div class="dining-month-row">
+          <span class="dining-month-label">${formatMonthLabel(key)}</span>
+          <div class="dining-month-meter" aria-label="${key} ${formatRc(month.reward)} / 80 RC">
+            <div class="dining-month-track" aria-hidden="true">
+              <span style="width: ${progressPercent(month.reward, DINING_MONTHLY_REWARD_CAP)}%"></span>
+            </div>
+            <span class="dining-month-value">${formatRc(month.reward)} / ${formatRc(
+              DINING_MONTHLY_REWARD_CAP,
+            )} RC</span>
+          </div>
+        </div>
+      `,
+    )
+    .join("")}</div>`;
 }
 
 function renderEmpty(title, text) {
@@ -673,13 +684,9 @@ function render() {
   el.cancelEdit.classList.toggle("hidden", !state.editingId);
 
   const analysis = analyzeRewards();
-  const currentMonth = monthKey(todayString());
-  const currentDiningMonth =
-    analysis.diningMonths.find(([key]) => key === currentMonth)?.[1] || {
-      total: 0,
-      dining: 0,
-      reward: 0,
-    };
+  const diningThresholdMonths = analysis.diningMonths.filter(
+    ([, month]) => month.total >= DINING_MONTHLY_THRESHOLD,
+  ).length;
   const welcomeDeadline = state.settings.openDate ? datePlusDays(state.settings.openDate, 59) : "";
   const daysLeft = welcomeDeadline ? daysBetween(todayString(), welcomeDeadline) : null;
 
@@ -697,15 +704,11 @@ function render() {
       state.settings.openDate ? `迎新窗口到 ${welcomeDeadline}` : "用于判断开卡后 60 天。",
     ),
     renderTask(
-      currentDiningMonth.total >= DINING_MONTHLY_THRESHOLD ? "done" : "",
-      "本月内地餐饮门槛",
-      currentDiningMonth.total >= DINING_MONTHLY_THRESHOLD
-        ? `总签账 ${formatAmount(currentDiningMonth.total)} 已达门槛，餐饮 ${formatAmount(
-            currentDiningMonth.dining,
-          )}，已估 ${formatRc(currentDiningMonth.reward)} RC。`
-        : `本月总签账 ${formatAmount(currentDiningMonth.total)}，还差 ${formatAmount(
-            Math.max(DINING_MONTHLY_THRESHOLD - currentDiningMonth.total, 0),
-          )} 解锁；达标后当月餐饮从第一元算 3%。`,
+      diningThresholdMonths > 0 ? "done" : "",
+      "内地餐饮门槛",
+      diningThresholdMonths > 0
+        ? `已有 ${diningThresholdMonths} / 6 个月达 HKD 1,200 门槛，按账单月份自动统计。`
+        : "7-12 月每月满 HKD 1,200 后，当月餐饮从第一元算 3%。",
     ),
     renderTask(
       analysis.pulseSpend < 80000 ? "" : "done",
@@ -732,7 +735,7 @@ function render() {
       "内地餐饮额外 3%",
       analysis.diningReward,
       DINING_PROMO_REWARD_CAP,
-      renderDiningRewardDetail(analysis, currentMonth, currentDiningMonth),
+      renderDiningRewardDetail(analysis),
       "amber",
       `${formatRc(analysis.diningReward)} / ${formatRc(DINING_PROMO_REWARD_CAP)} RC`,
     ),

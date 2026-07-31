@@ -348,22 +348,45 @@ select:focus {
   line-height: 1.1;
 }
 
-.dining-reward-detail {
+.dining-month-progress {
   display: grid;
-  gap: 4px;
+  gap: 7px;
 }
 
-.dining-reward-detail span {
+.dining-month-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.dining-month-label,
+.dining-month-value {
   color: var(--muted);
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
-.dining-reward-detail .dining-current {
-  font-size: 13px;
+.dining-month-meter {
+  display: grid;
+  grid-template-columns: minmax(42px, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
 }
 
-.dining-reward-detail .dining-other {
-  font-size: 11px;
+.dining-month-track {
+  height: 7px;
+  overflow: hidden;
+  background: #efe0c7;
+  border-radius: 999px;
+}
+
+.dining-month-track span {
+  display: block;
+  height: 100%;
+  background: var(--amber);
+  border-radius: inherit;
 }
 
 .progress-track {
