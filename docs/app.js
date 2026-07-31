@@ -3,6 +3,8 @@ const BASE_RATE = 0.004;
 const RED_HOT_EXTRA_RATE = 0.02;
 const PULSE_EXTRA_RATE = 0.02;
 const DINING_EXTRA_RATE = 0.03;
+const DINING_PROMO_START = "2026-07-01";
+const DINING_PROMO_END = "2026-12-31";
 
 const regionLabels = {
   mainland: "中国内地",
@@ -145,10 +147,18 @@ function canUsePulseExtra(transaction) {
   return transaction.payment === "applepay" || transaction.payment === "unionpay";
 }
 
+function isDiningPromoMainland(transaction) {
+  return (
+    transaction.region === "mainland" &&
+    transaction.date >= DINING_PROMO_START &&
+    transaction.date <= DINING_PROMO_END
+  );
+}
+
 function isMainlandDining(transaction) {
   return (
     transaction.diningEligible !== false &&
-    transaction.region === "mainland" &&
+    isDiningPromoMainland(transaction) &&
     transaction.category === "dining"
   );
 }
@@ -182,6 +192,7 @@ function analyzeRewards() {
   const months = new Map();
 
   for (const transaction of sorted) {
+    if (!isDiningPromoMainland(transaction)) continue;
     const key = monthKey(transaction.date);
     const current = months.get(key) || { total: 0, dining: 0, reward: 0 };
     current.total += transaction.amount;
@@ -355,7 +366,7 @@ function render() {
       "内地餐饮额外 3%",
       analysis.diningReward,
       480,
-      "月满 1,200 后计算，月封顶 80 RC",
+      "2026-07-01 至 12-31，月满 1,200 后计算",
       "amber",
     ),
     renderProgressCard(

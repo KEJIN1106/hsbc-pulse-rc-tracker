@@ -30,6 +30,8 @@ const BASE_RATE = 0.004;
 const RED_HOT_EXTRA_RATE = 0.02;
 const PULSE_EXTRA_RATE = 0.02;
 const DINING_EXTRA_RATE = 0.03;
+const DINING_PROMO_START = "2026-07-01";
+const DINING_PROMO_END = "2026-12-31";
 
 const DEFAULT_SETTINGS: Settings = {
   openDate: "",
@@ -118,10 +120,18 @@ function canUsePulseExtra(transaction: Transaction) {
   return transaction.payment === "applepay" || transaction.payment === "unionpay";
 }
 
+function isDiningPromoMainland(transaction: Transaction) {
+  return (
+    transaction.region === "mainland" &&
+    transaction.date >= DINING_PROMO_START &&
+    transaction.date <= DINING_PROMO_END
+  );
+}
+
 function isMainlandDining(transaction: Transaction) {
   return (
     transaction.diningEligible !== false &&
-    transaction.region === "mainland" &&
+    isDiningPromoMainland(transaction) &&
     transaction.category === "dining"
   );
 }
@@ -180,6 +190,7 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
   >();
 
   for (const transaction of sorted) {
+    if (!isDiningPromoMainland(transaction)) continue;
     const key = monthKey(transaction.date);
     const current = months.get(key) ?? {
       total: 0,
@@ -597,7 +608,7 @@ export default function Home() {
             label="内地餐饮额外 3%"
             value={analysis.diningReward}
             max={480}
-            detail={`月满 1,200 后计算，月封顶 80 RC`}
+            detail="2026-07-01 至 12-31，月满 1,200 后计算"
             tone="amber"
           />
           <ProgressCard
@@ -682,7 +693,7 @@ export default function Home() {
               <p className="eyebrow">Dining</p>
               <h2>每月餐饮上限</h2>
             </div>
-            <span className="cap-badge">月满1,200，3% 月80/总480</span>
+            <span className="cap-badge">2026下半年：月满1,200，3% 月80/总480</span>
           </div>
           <div className="month-grid">
             {analysis.diningMonths.length === 0 ? (
