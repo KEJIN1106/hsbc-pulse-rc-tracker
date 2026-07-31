@@ -2,7 +2,8 @@ const STORAGE_KEY = "hsbc-pulse-cashback-v1";
 const BASE_RATE = 0.004;
 const RED_HOT_EXTRA_RATE = 0.02;
 const PULSE_EXTRA_RATE = 0.02;
-const DINING_EXTRA_RATE = 0.03;
+const DINING_BASE_RATE = 0.03;
+const DINING_PULSE_EXTRA_RATE = 0.02;
 
 const regionLabels = {
   mainland: "中国内地",
@@ -177,12 +178,6 @@ function analyzeRewards() {
     .reduce((sum, transaction) => sum + transaction.amount, 0);
   const welcomeReached = welcomeSpend >= 8000;
   const welcomeBonus = welcomeReached ? 1800 : 0;
-  const welcomeCount = sorted.filter(
-    (transaction) =>
-      isWithinWelcomeWindow(transaction.date, state.settings.openDate) && transaction.amount > 50,
-  ).length;
-  const welcomeSmallBonusCount = welcomeReached ? Math.min(welcomeCount, 28) : 0;
-  const welcomeSmallBonus = welcomeSmallBonusCount * 10;
   const redHot = allocateCappedRewards(sorted, canUseRedHot, 100000, RED_HOT_EXTRA_RATE);
   const pulse = allocateCappedRewards(sorted, canUsePulseExtra, 80000, PULSE_EXTRA_RATE);
   const months = new Map();
@@ -195,12 +190,21 @@ function analyzeRewards() {
     months.set(key, current);
   }
 
-  let diningTotalReward = 0;
+  let diningBaseReward = 0;
+  let diningPulseExtraReward = 0;
   for (const current of months.values()) {
-    current.reward = current.total >= 1200 ? Math.min(current.dining * DINING_EXTRA_RATE, 80) : 0;
-    diningTotalReward += current.reward;
+    current.baseReward =
+      current.total >= 1200 ? Math.min(current.dining * DINING_BASE_RATE, 60) : 0;
+    current.pulseExtraReward =
+      current.total >= 1200
+        ? Math.min(current.dining * DINING_PULSE_EXTRA_RATE, 40)
+        : 0;
+    diningBaseReward += current.baseReward;
+    diningPulseExtraReward += current.pulseExtraReward;
   }
-  diningTotalReward = Math.min(diningTotalReward, 480);
+  diningBaseReward = Math.min(diningBaseReward, 360);
+  diningPulseExtraReward = Math.min(diningPulseExtraReward, 240);
+  const diningTotalReward = diningBaseReward + diningPulseExtraReward;
 
   const bestPostureSpend = sorted
     .filter(
@@ -215,19 +219,18 @@ function analyzeRewards() {
     welcomeSpend,
     welcomeReached,
     welcomeBonus,
-    welcomeCount,
-    welcomeSmallBonusCount,
-    welcomeSmallBonus,
     redHotSpend: redHot.used,
     redHotReward: redHot.reward,
     pulseSpend: pulse.used,
     pulseReward: pulse.reward,
     diningMonths: [...months.entries()].sort((a, b) => b[0].localeCompare(a[0])),
+    diningBaseReward,
+    diningPulseExtraReward,
     diningReward: diningTotalReward,
     totalSpend,
     bestPostureSpend,
     totalReward:
-      baseReward + welcomeBonus + welcomeSmallBonus + redHot.reward + pulse.reward + diningTotalReward,
+      baseReward + welcomeBonus + redHot.reward + pulse.reward + diningTotalReward,
   };
 }
 
@@ -326,7 +329,7 @@ function render() {
   el.totalReward.textContent = `${formatRc(analysis.totalReward)} RC`;
   el.totalSpend.textContent = `已记录消费 ${formatAmount(analysis.totalSpend)}`;
   el.baseReward.textContent = `${formatRc(analysis.baseReward)} RC`;
-  el.welcomeReward.textContent = `${formatRc(analysis.welcomeBonus + analysis.welcomeSmallBonus)} RC`;
+  el.welcomeReward.textContent = `${formatRc(analysis.welcomeBonus)} RC`;
   el.diningReward.textContent = `${formatRc(analysis.diningReward)} RC`;
   el.bestPostureSpend.textContent = formatAmount(analysis.bestPostureSpend);
 
@@ -356,15 +359,17 @@ function render() {
       analysis.welcomeSpend,
       8000,
       analysis.welcomeReached
-        ? "已达标，预计 1,800 RC + 单笔奖励"
+        ? "已达标，预计 1,800 RC"
         : `还差 ${formatAmount(Math.max(8000 - analysis.welcomeSpend, 0))}`,
       "green",
     ),
     renderProgressCard(
-      "迎新单笔 >50",
-      analysis.welcomeSmallBonusCount,
-      28,
-      `${analysis.welcomeSmallBonusCount}/28 次，${analysis.welcomeSmallBonus} RC`,
+      "内地餐饮 5%",
+      analysis.diningReward,
+      600,
+      `3% ${formatRc(analysis.diningBaseReward)}/360 + 2% ${formatRc(
+        analysis.diningPulseExtraReward,
+      )}/240 RC`,
       "amber",
     ),
     renderProgressCard(
@@ -432,7 +437,7 @@ function render() {
         <strong>${key}</strong>
         <span>总签账 ${formatAmount(month.total)}</span>
         <span>餐饮 ${formatAmount(month.dining)}</span>
-        <b>${formatRc(month.reward)} RC</b>
+        <b>${formatRc(month.baseReward + month.pulseExtraReward)} RC</b>
       </div>
     `,
         )
