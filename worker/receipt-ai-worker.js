@@ -126,6 +126,7 @@ function normalizeReceipt(receipt) {
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("No valid amount found");
   }
+  const category = receiptCategory(receipt);
 
   return {
     date: typeof receipt.date === "string" ? receipt.date : "",
@@ -135,8 +136,8 @@ function normalizeReceipt(receipt) {
     region: ["mainland", "macau", "hongkong", "overseas"].includes(receipt.region)
       ? receipt.region
       : "mainland",
-    category: receiptCategory(receipt),
-    diningEligible: /meituan|美团/i.test(`${receipt.merchant || ""} ${receipt.note || ""}`),
+    category,
+    diningEligible: category === "dining",
     payment: receiptPayment(receipt),
     confidence: Math.max(0, Math.min(Number(receipt.confidence || 0), 1)),
     note: typeof receipt.note === "string" ? receipt.note : "",
@@ -222,7 +223,7 @@ Fields for each transaction:
 - merchant: merchant or counterparty name. Empty string if not visible.
 - region: mainland, macau, hongkong, or overseas.
 - category: dining, shopping, travel, or other.
-- diningEligible: true only if the merchant or platform explicitly shows MEITUAN or 美团; otherwise false.
+- diningEligible: true when the transaction is an eligible dining transaction in Mainland China; false for non-dining or uncertain category.
 - payment: applepay only if the receipt explicitly shows APPLEPAY or Apple Pay; unionpay only if it explicitly shows QR; otherwise other.
 - confidence: number from 0 to 1.
 - note: short reason if any field is uncertain.
@@ -231,6 +232,7 @@ Important:
 - If the image contains multiple transaction rows, return every real transaction in transactions.
 - If the image is not a payment or credit-card transaction receipt, return {"transactions":[]}.
 - MEITUAN or 美团 merchants are dining.
+- Dining category means restaurants, cafes, drinks, food delivery, and other dining receipts; it is not limited to MEITUAN.
 - Classify category from merchant, item names, and receipt context: dining for restaurants, cafes, drinks, food delivery, and Meituan; shopping for retail, grocery, ecommerce, and supermarkets; travel for flights, hotels, trains, taxis, fuel, and transit; other if uncertain.
 - Do not infer payment method from card scheme, bank name, UnionPay logo, or merchant name. For payment, only APPLEPAY/Apple Pay maps to applepay, only QR maps to unionpay, and everything else maps to other.
 - Preserve recognizable platform words such as MEITUAN or 美团 in merchant or note.

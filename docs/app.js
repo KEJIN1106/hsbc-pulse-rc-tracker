@@ -6,6 +6,11 @@ const PULSE_EXTRA_RATE = 0.02;
 const DINING_EXTRA_RATE = 0.03;
 const DINING_PROMO_START = "2026-07-01";
 const DINING_PROMO_END = "2026-12-31";
+const DINING_PROMO_MONTHS = ["2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12"];
+const DINING_MONTHLY_THRESHOLD = 1200;
+const DINING_MONTHLY_REWARD_CAP = 80;
+const DINING_PROMO_REWARD_CAP = 480;
+const DINING_MONTHLY_SPEND_FOR_CAP = DINING_MONTHLY_REWARD_CAP / DINING_EXTRA_RATE;
 const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
 
 const regionLabels = {
@@ -209,6 +214,10 @@ function analyzeRewards() {
   const pulse = allocateCappedRewards(sorted, canUsePulseExtra, 80000, PULSE_EXTRA_RATE);
   const months = new Map();
 
+  for (const month of DINING_PROMO_MONTHS) {
+    months.set(month, { total: 0, dining: 0, reward: 0 });
+  }
+
   for (const transaction of sorted) {
     if (!isDiningPromoMainland(transaction)) continue;
     const key = monthKey(transaction.date);
@@ -220,10 +229,13 @@ function analyzeRewards() {
 
   let diningTotalReward = 0;
   for (const current of months.values()) {
-    current.reward = current.total >= 1200 ? Math.min(current.dining * DINING_EXTRA_RATE, 80) : 0;
+    current.reward =
+      current.total >= DINING_MONTHLY_THRESHOLD
+        ? Math.min(current.dining * DINING_EXTRA_RATE, DINING_MONTHLY_REWARD_CAP)
+        : 0;
     diningTotalReward += current.reward;
   }
-  diningTotalReward = Math.min(diningTotalReward, 480);
+  diningTotalReward = Math.min(diningTotalReward, DINING_PROMO_REWARD_CAP);
 
   const bestPostureSpend = sorted
     .filter(
@@ -243,7 +255,7 @@ function analyzeRewards() {
     redHotReward: redHot.reward,
     pulseSpend: pulse.used,
     pulseReward: pulse.reward,
-    diningMonths: [...months.entries()].sort((a, b) => b[0].localeCompare(a[0])),
+    diningMonths: DINING_PROMO_MONTHS.map((month) => [month, months.get(month)]),
     diningReward: diningTotalReward,
     totalSpend,
     bestPostureSpend,
@@ -319,6 +331,7 @@ function paymentFromAiData(data) {
 function normalizeAiReceiptItem(data) {
   const amount = Number(data?.amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
+  const category = categoryFromAiData(data);
 
   return {
     date: typeof data.date === "string" ? data.date : "",
@@ -327,8 +340,8 @@ function normalizeAiReceiptItem(data) {
     region: ["mainland", "macau", "hongkong", "overseas"].includes(data.region)
       ? data.region
       : "mainland",
-    category: categoryFromAiData(data),
-    diningEligible: /meituan|美团/i.test(`${data?.merchant || ""} ${data?.note || ""}`),
+    category,
+    diningEligible: category === "dining",
     payment: paymentFromAiData(data),
     merchant: typeof data.merchant === "string" ? data.merchant : "",
     confidence: Number(data.confidence || 0),
@@ -456,7 +469,6 @@ function parseReceiptText(text) {
   const normalized = normalizeOcrText(text);
   const lower = normalized.toLowerCase();
   const merchant = extractMerchantFromText(normalized);
-  const isMeituan = /meituan|美团/i.test(`${normalized} ${merchant}`);
   const date = extractDateFromText(normalized);
   const amount = extractAmountFromText(normalized);
   const currency = /hkd|hk\$|港币/i.test(normalized) ? "HKD" : "RMB";
@@ -477,7 +489,7 @@ function parseReceiptText(text) {
       ? "dining"
       : "other";
 
-  return { amount, currency, date, merchant, payment, region, category, diningEligible: isMeituan };
+  return { amount, currency, date, merchant, payment, region, category, diningEligible: category === "dining" };
 }
 
 function loadTesseract() {
@@ -670,11 +682,15 @@ function render() {
       state.settings.openDate ? `迎新窗口到 ${welcomeDeadline}` : "用于判断开卡后 60 天。",
     ),
     renderTask(
-      currentDiningMonth.total >= 1200 ? "done" : "",
+      currentDiningMonth.total >= DINING_MONTHLY_THRESHOLD ? "done" : "",
       "本月内地餐饮门槛",
-      `本月总签账 ${formatAmount(currentDiningMonth.total)}，还差 ${formatAmount(
-        Math.max(1200 - currentDiningMonth.total, 0),
-      )} 解锁。`,
+      currentDiningMonth.total >= DINING_MONTHLY_THRESHOLD
+        ? `总签账 ${formatAmount(currentDiningMonth.total)} 已达门槛，餐饮 ${formatAmount(
+            currentDiningMonth.dining,
+          )}，已估 ${formatRc(currentDiningMonth.reward)} RC。`
+        : `本月总签账 ${formatAmount(currentDiningMonth.total)}，还差 ${formatAmount(
+            Math.max(DINING_MONTHLY_THRESHOLD - currentDiningMonth.total, 0),
+          )} 解锁；达标后当月餐饮从第一元算 3%。`,
     ),
     renderTask(
       analysis.pulseSpend < 80000 ? "" : "done",
@@ -700,8 +716,8 @@ function render() {
     renderProgressCard(
       "内地餐饮额外 3%",
       analysis.diningReward,
-      480,
-      "2026-07-01 至 12-31，月满 1,200 后计算",
+      DINING_PROMO_REWARD_CAP,
+      "六个月合计；月满 1,200 后当月餐饮从第一元计 3%，月封顶 80",
       "amber",
     ),
     renderProgressCard(
@@ -761,20 +777,22 @@ function render() {
         .join("")}</div>`
     : renderEmpty("还没有记录", "先新增一笔消费，进度条会马上开始工作。");
 
-  el.monthGrid.innerHTML = analysis.diningMonths.length
-    ? analysis.diningMonths
-        .map(
-          ([key, month]) => `
+  el.monthGrid.innerHTML = analysis.diningMonths
+    .map(
+      ([key, month]) => `
       <div class="month-card">
         <strong>${key}</strong>
-        <span>总签账 ${formatAmount(month.total)}</span>
-        <span>餐饮 ${formatAmount(month.dining)}</span>
+        <span>总签账 ${formatAmount(month.total)}${
+          month.total >= DINING_MONTHLY_THRESHOLD
+            ? "，已达门槛"
+            : `，差 ${formatAmount(DINING_MONTHLY_THRESHOLD - month.total)}`
+        }</span>
+        <span>餐饮 ${formatAmount(month.dining)} / ${formatAmount(DINING_MONTHLY_SPEND_FOR_CAP)} 封顶</span>
         <b>${formatRc(month.reward)} RC</b>
       </div>
     `,
-        )
-        .join("")
-    : renderEmpty("暂无月份", "内地餐饮消费会在这里按月汇总。");
+    )
+    .join("");
 
   el.footerNote.textContent = `计算按你提供的规则：HKD/RMB 按 1:1 记录；最终入账以汇丰账单和活动条款为准。${
     daysLeft !== null && daysLeft >= 0 ? ` 迎新还剩 ${daysLeft + 1} 天。` : ""

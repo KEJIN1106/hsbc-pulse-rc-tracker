@@ -62,6 +62,11 @@ const PULSE_EXTRA_RATE = 0.02;
 const DINING_EXTRA_RATE = 0.03;
 const DINING_PROMO_START = "2026-07-01";
 const DINING_PROMO_END = "2026-12-31";
+const DINING_PROMO_MONTHS = ["2026-07", "2026-08", "2026-09", "2026-10", "2026-11", "2026-12"];
+const DINING_MONTHLY_THRESHOLD = 1200;
+const DINING_MONTHLY_REWARD_CAP = 80;
+const DINING_PROMO_REWARD_CAP = 480;
+const DINING_MONTHLY_SPEND_FOR_CAP = DINING_MONTHLY_REWARD_CAP / DINING_EXTRA_RATE;
 const TESSERACT_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
 let tesseractLoader: Promise<TesseractApi> | null = null;
 
@@ -230,6 +235,14 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
     }
   >();
 
+  for (const month of DINING_PROMO_MONTHS) {
+    months.set(month, {
+      total: 0,
+      dining: 0,
+      reward: 0,
+    });
+  }
+
   for (const transaction of sorted) {
     if (!isDiningPromoMainland(transaction)) continue;
     const key = monthKey(transaction.date);
@@ -246,11 +259,13 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
   let diningTotalReward = 0;
   for (const current of months.values()) {
     current.reward =
-      current.total >= 1200 ? Math.min(current.dining * DINING_EXTRA_RATE, 80) : 0;
+      current.total >= DINING_MONTHLY_THRESHOLD
+        ? Math.min(current.dining * DINING_EXTRA_RATE, DINING_MONTHLY_REWARD_CAP)
+        : 0;
     diningTotalReward += current.reward;
   }
 
-  diningTotalReward = Math.min(diningTotalReward, 480);
+  diningTotalReward = Math.min(diningTotalReward, DINING_PROMO_REWARD_CAP);
 
   const bestPostureSpend = sorted
     .filter(
@@ -270,7 +285,7 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
     redHotReward: redHot.reward,
     pulseSpend: pulse.used,
     pulseReward: pulse.reward,
-    diningMonths: [...months.entries()].sort((a, b) => b[0].localeCompare(a[0])),
+    diningMonths: DINING_PROMO_MONTHS.map((month) => [month, months.get(month)!] as const),
     diningReward: diningTotalReward,
     totalSpend,
     bestPostureSpend,
@@ -367,7 +382,6 @@ function parseReceiptText(text: string) {
   const normalized = normalizeOcrText(text);
   const lower = normalized.toLowerCase();
   const merchant = extractMerchantFromText(normalized);
-  const isMeituan = /meituan|美团/i.test(`${normalized} ${merchant}`);
   const date = extractDateFromText(normalized);
   const amount = extractAmountFromText(normalized);
   const currency: "HKD" | "RMB" = /hkd|hk\$|港币/i.test(normalized) ? "HKD" : "RMB";
@@ -388,7 +402,7 @@ function parseReceiptText(text: string) {
       ? "dining"
       : "other";
 
-  return { amount, currency, date, merchant, payment, region, category, diningEligible: isMeituan };
+  return { amount, currency, date, merchant, payment, region, category, diningEligible: category === "dining" };
 }
 
 function loadTesseract() {
@@ -436,6 +450,7 @@ function normalizeAiReceiptItem(data: Record<string, unknown> | null | undefined
   if (!data) return null;
   const amount = Number(data?.amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
+  const category = categoryFromAiData(data);
 
   return {
     date: typeof data.date === "string" ? data.date : "",
@@ -444,8 +459,8 @@ function normalizeAiReceiptItem(data: Record<string, unknown> | null | undefined
     region: ["mainland", "macau", "hongkong", "overseas"].includes(String(data.region))
       ? (data.region as Region)
       : "mainland",
-    category: categoryFromAiData(data),
-    diningEligible: /meituan|美团/i.test(`${data.merchant || ""} ${data.note || ""}`),
+    category,
+    diningEligible: category === "dining",
     payment: paymentFromAiData(data),
     merchant: typeof data.merchant === "string" ? data.merchant : "",
     confidence: Number(data.confidence || 0),
@@ -1020,11 +1035,20 @@ export default function Home() {
                     : "用于判断开卡后 60 天。"}
                 </span>
               </div>
-              <div className={currentDiningMonth.total >= 1200 ? "task done" : "task"}>
+              <div
+                className={
+                  currentDiningMonth.total >= DINING_MONTHLY_THRESHOLD ? "task done" : "task"
+                }
+              >
                 <strong>本月内地餐饮门槛</strong>
                 <span>
-                  本月总签账 {formatAmount(currentDiningMonth.total)}，还差{" "}
-                  {formatAmount(Math.max(1200 - currentDiningMonth.total, 0))} 解锁。
+                  {currentDiningMonth.total >= DINING_MONTHLY_THRESHOLD
+                    ? `总签账 ${formatAmount(currentDiningMonth.total)} 已达门槛，餐饮 ${formatAmount(
+                        currentDiningMonth.dining,
+                      )}，已估 ${formatRc(currentDiningMonth.reward)} RC。`
+                    : `本月总签账 ${formatAmount(currentDiningMonth.total)}，还差 ${formatAmount(
+                        Math.max(DINING_MONTHLY_THRESHOLD - currentDiningMonth.total, 0),
+                      )} 解锁；达标后当月餐饮从第一元算 3%。`}
                 </span>
               </div>
               <div className={analysis.pulseSpend < 80000 ? "task" : "task done"}>
@@ -1056,8 +1080,8 @@ export default function Home() {
           <ProgressCard
             label="内地餐饮额外 3%"
             value={analysis.diningReward}
-            max={480}
-            detail="2026-07-01 至 12-31，月满 1,200 后计算"
+            max={DINING_PROMO_REWARD_CAP}
+            detail="六个月合计；月满 1,200 后当月餐饮从第一元计 3%，月封顶 80"
             tone="amber"
           />
           <ProgressCard
@@ -1140,26 +1164,26 @@ export default function Home() {
           <div className="panel-title">
             <div>
               <p className="eyebrow">Dining</p>
-              <h2>每月餐饮上限</h2>
+              <h2>六个月餐饮奖励</h2>
             </div>
-            <span className="cap-badge">2026下半年：月满1,200，3% 月80/总480</span>
+            <span className="cap-badge">2026-07 至 12：月满1,200，餐饮3%，月80/总480</span>
           </div>
           <div className="month-grid">
-            {analysis.diningMonths.length === 0 ? (
-              <div className="empty-state">
-                <strong>暂无月份</strong>
-                <span>内地餐饮消费会在这里按月汇总。</span>
+            {analysis.diningMonths.map(([key, month]) => (
+              <div className="month-card" key={key}>
+                <strong>{key}</strong>
+                <span>
+                  总签账 {formatAmount(month.total)}
+                  {month.total >= DINING_MONTHLY_THRESHOLD
+                    ? "，已达门槛"
+                    : `，差 ${formatAmount(DINING_MONTHLY_THRESHOLD - month.total)}`}
+                </span>
+                <span>
+                  餐饮 {formatAmount(month.dining)} / {formatAmount(DINING_MONTHLY_SPEND_FOR_CAP)} 封顶
+                </span>
+                <b>{formatRc(month.reward)} RC</b>
               </div>
-            ) : (
-              analysis.diningMonths.map(([key, month]) => (
-                <div className="month-card" key={key}>
-                  <strong>{key}</strong>
-                  <span>总签账 {formatAmount(month.total)}</span>
-                  <span>餐饮 {formatAmount(month.dining)}</span>
-                  <b>{formatRc(month.reward)} RC</b>
-                </div>
-              ))
-            )}
+            ))}
           </div>
         </section>
 
