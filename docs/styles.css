@@ -123,13 +123,17 @@ h2 {
 
 .settings-strip {
   display: grid;
-  grid-template-columns: 230px repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 230px);
   gap: 10px;
   margin: 4px 0 14px;
   padding: 10px;
   background: #e9f0ec;
   border: 1px solid var(--line);
   border-radius: 8px;
+}
+
+.date-field input {
+  max-width: 180px;
 }
 
 label {
@@ -213,6 +217,13 @@ select:focus {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.reward-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .quick-row {
@@ -480,6 +491,7 @@ footer {
   }
 
   .field-grid,
+  .reward-options,
   .month-grid {
     grid-template-columns: 1fr;
   }

@@ -14,13 +14,13 @@ type Transaction = {
   region: Region;
   category: Category;
   payment: PaymentMethod;
+  redHotEligible?: boolean;
+  diningEligible?: boolean;
   note: string;
 };
 
 type Settings = {
   openDate: string;
-  redHotRegistered: boolean;
-  diningEligible: boolean;
 };
 
 type TransactionInput = Omit<Transaction, "id">;
@@ -33,8 +33,6 @@ const DINING_EXTRA_RATE = 0.03;
 
 const DEFAULT_SETTINGS: Settings = {
   openDate: "",
-  redHotRegistered: false,
-  diningEligible: true,
 };
 
 const DEFAULT_INPUT: TransactionInput = {
@@ -44,6 +42,8 @@ const DEFAULT_INPUT: TransactionInput = {
   region: "mainland",
   category: "dining",
   payment: "applepay",
+  redHotEligible: true,
+  diningEligible: true,
   note: "",
 };
 
@@ -107,9 +107,9 @@ function progressPercent(value: number, max: number) {
   return clamp((value / max) * 100, 100);
 }
 
-function canUseRedHot(transaction: Transaction, settings: Settings) {
+function canUseRedHot(transaction: Transaction) {
   return (
-    settings.redHotRegistered &&
+    transaction.redHotEligible !== false &&
     (transaction.region === "mainland" || transaction.region === "macau")
   );
 }
@@ -119,7 +119,11 @@ function canUsePulseExtra(transaction: Transaction) {
 }
 
 function isMainlandDining(transaction: Transaction) {
-  return transaction.region === "mainland" && transaction.category === "dining";
+  return (
+    transaction.diningEligible !== false &&
+    transaction.region === "mainland" &&
+    transaction.category === "dining"
+  );
 }
 
 function allocateCappedRewards(
@@ -166,7 +170,7 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
 
   const redHot = allocateCappedRewards(
     sorted,
-    (transaction) => canUseRedHot(transaction, settings),
+    canUseRedHot,
     100000,
     RED_HOT_EXTRA_RATE,
   );
@@ -192,9 +196,7 @@ function analyzeRewards(transactions: Transaction[], settings: Settings) {
   let diningTotalReward = 0;
   for (const current of months.values()) {
     current.reward =
-      settings.diningEligible && current.total >= 1200
-        ? Math.min(current.dining * DINING_EXTRA_RATE, 80)
-        : 0;
+      current.total >= 1200 ? Math.min(current.dining * DINING_EXTRA_RATE, 80) : 0;
     diningTotalReward += current.reward;
   }
 
@@ -386,7 +388,7 @@ export default function Home() {
         </div>
 
         <section className="settings-strip" aria-label="卡片设置">
-          <label>
+          <label className="date-field">
             <span>开卡日期</span>
             <input
               type="date"
@@ -395,32 +397,6 @@ export default function Home() {
                 setSettings((current) => ({ ...current, openDate: event.target.value }))
               }
             />
-          </label>
-          <label className="switch-row">
-            <input
-              type="checkbox"
-              checked={settings.redHotRegistered}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  redHotRegistered: event.target.checked,
-                }))
-              }
-            />
-            <span>已登记最红自主奖赏「赏世界」</span>
-          </label>
-          <label className="switch-row">
-            <input
-              type="checkbox"
-              checked={settings.diningEligible}
-              onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  diningEligible: event.target.checked,
-                }))
-              }
-            />
-            <span>计算内地餐饮额外 3%</span>
           </label>
         </section>
 
@@ -446,7 +422,7 @@ export default function Home() {
             </div>
 
             <div className="field-grid">
-              <label>
+              <label className="date-field">
                 <span>日期</span>
                 <input
                   type="date"
@@ -524,6 +500,29 @@ export default function Home() {
               </label>
             </div>
 
+            <div className="reward-options" aria-label="逐笔返现选项">
+              <label className="switch-row">
+                <input
+                  type="checkbox"
+                  checked={input.redHotEligible !== false}
+                  onChange={(event) =>
+                    updateInput("redHotEligible", event.target.checked)
+                  }
+                />
+                <span>这一笔计算赏世界额外 2%</span>
+              </label>
+              <label className="switch-row">
+                <input
+                  type="checkbox"
+                  checked={input.diningEligible !== false}
+                  onChange={(event) =>
+                    updateInput("diningEligible", event.target.checked)
+                  }
+                />
+                <span>这一笔参与内地餐饮额外 3%</span>
+              </label>
+            </div>
+
             <div className="quick-row" aria-label="快速金额">
               {quickAmounts.map((amount) => (
                 <button
@@ -570,12 +569,6 @@ export default function Home() {
                     ? `迎新窗口到 ${welcomeDeadline}`
                     : "用于判断开卡后 60 天。"}
                 </span>
-              </div>
-              <div className={settings.redHotRegistered ? "task done" : "task urgent"}>
-                <strong>
-                  {settings.redHotRegistered ? "已登记赏世界" : "登记最红自主奖赏"}
-                </strong>
-                <span>内地和澳门消费才会加入额外 2% 进度。</span>
               </div>
               <div className={currentDiningMonth.total >= 1200 ? "task done" : "task"}>
                 <strong>本月内地餐饮门槛</strong>

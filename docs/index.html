@@ -33,17 +33,9 @@
       </section>
 
       <section class="settings-strip" aria-label="卡片设置">
-        <label>
+        <label class="date-field">
           <span>开卡日期</span>
           <input id="openDate" type="date" />
-        </label>
-        <label class="switch-row">
-          <input id="redHotRegistered" type="checkbox" />
-          <span>已登记最红自主奖赏「赏世界」</span>
-        </label>
-        <label class="switch-row">
-          <input id="diningEligible" type="checkbox" checked />
-          <span>计算内地餐饮额外 3%</span>
         </label>
       </section>
 
@@ -58,7 +50,7 @@
           </div>
 
           <div class="field-grid">
-            <label>
+            <label class="date-field">
               <span>日期</span>
               <input id="date" type="date" required />
             </label>
@@ -98,6 +90,17 @@
                 <option value="unionpay">云闪付</option>
                 <option value="other">其他</option>
               </select>
+            </label>
+          </div>
+
+          <div class="reward-options" aria-label="逐笔返现选项">
+            <label class="switch-row">
+              <input id="redHotEligible" type="checkbox" checked />
+              <span>这一笔计算赏世界额外 2%</span>
+            </label>
+            <label class="switch-row">
+              <input id="transactionDiningEligible" type="checkbox" checked />
+              <span>这一笔参与内地餐饮额外 3%</span>
             </label>
           </div>
 

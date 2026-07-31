@@ -27,8 +27,6 @@ const paymentLabels = {
 const state = {
   settings: {
     openDate: "",
-    redHotRegistered: false,
-    diningEligible: true,
   },
   transactions: [],
   editingId: null,
@@ -37,14 +35,14 @@ const state = {
 
 const ids = [
   "openDate",
-  "redHotRegistered",
-  "diningEligible",
   "date",
   "amount",
   "currency",
   "region",
   "category",
   "payment",
+  "redHotEligible",
+  "transactionDiningEligible",
   "note",
   "entryForm",
   "formTitle",
@@ -138,7 +136,7 @@ function progressPercent(value, max) {
 
 function canUseRedHot(transaction) {
   return (
-    state.settings.redHotRegistered &&
+    transaction.redHotEligible !== false &&
     (transaction.region === "mainland" || transaction.region === "macau")
   );
 }
@@ -148,7 +146,11 @@ function canUsePulseExtra(transaction) {
 }
 
 function isMainlandDining(transaction) {
-  return transaction.region === "mainland" && transaction.category === "dining";
+  return (
+    transaction.diningEligible !== false &&
+    transaction.region === "mainland" &&
+    transaction.category === "dining"
+  );
 }
 
 function allocateCappedRewards(transactions, predicate, capAmount, rate) {
@@ -195,10 +197,7 @@ function analyzeRewards() {
 
   let diningTotalReward = 0;
   for (const current of months.values()) {
-    current.reward =
-      state.settings.diningEligible && current.total >= 1200
-        ? Math.min(current.dining * DINING_EXTRA_RATE, 80)
-        : 0;
+    current.reward = current.total >= 1200 ? Math.min(current.dining * DINING_EXTRA_RATE, 80) : 0;
     diningTotalReward += current.reward;
   }
   diningTotalReward = Math.min(diningTotalReward, 480);
@@ -250,6 +249,8 @@ function currentInput() {
     region: el.region.value,
     category: el.category.value,
     payment: el.payment.value,
+    redHotEligible: el.redHotEligible.checked,
+    diningEligible: el.transactionDiningEligible.checked,
     note: el.note.value.trim(),
   };
 }
@@ -261,6 +262,8 @@ function setInput(transaction) {
   el.region.value = transaction.region;
   el.category.value = transaction.category;
   el.payment.value = transaction.payment;
+  el.redHotEligible.checked = transaction.redHotEligible !== false;
+  el.transactionDiningEligible.checked = transaction.diningEligible !== false;
   el.note.value = transaction.note || "";
 }
 
@@ -273,6 +276,8 @@ function resetInput(keepDate = true) {
     region: "mainland",
     category: "dining",
     payment: "applepay",
+    redHotEligible: true,
+    diningEligible: true,
     note: "",
   });
 }
@@ -302,8 +307,6 @@ function renderEmpty(title, text) {
 
 function render() {
   el.openDate.value = state.settings.openDate;
-  el.redHotRegistered.checked = state.settings.redHotRegistered;
-  el.diningEligible.checked = state.settings.diningEligible;
   el.filter.value = state.filter;
   el.formTitle.textContent = state.editingId ? "编辑消费" : "新增消费";
   el.submitButton.textContent = state.editingId ? "保存修改" : "记录这一笔";
@@ -332,11 +335,6 @@ function render() {
       state.settings.openDate ? "done" : "urgent",
       state.settings.openDate ? "已设置开卡日期" : "先填开卡日期",
       state.settings.openDate ? `迎新窗口到 ${welcomeDeadline}` : "用于判断开卡后 60 天。",
-    ),
-    renderTask(
-      state.settings.redHotRegistered ? "done" : "urgent",
-      state.settings.redHotRegistered ? "已登记赏世界" : "登记最红自主奖赏",
-      "内地和澳门消费才会加入额外 2% 进度。",
     ),
     renderTask(
       currentDiningMonth.total >= 1200 ? "done" : "",
@@ -456,18 +454,6 @@ function escapeHtml(value) {
 function bindEvents() {
   el.openDate.addEventListener("change", () => {
     state.settings.openDate = el.openDate.value;
-    save();
-    render();
-  });
-
-  el.redHotRegistered.addEventListener("change", () => {
-    state.settings.redHotRegistered = el.redHotRegistered.checked;
-    save();
-    render();
-  });
-
-  el.diningEligible.addEventListener("change", () => {
-    state.settings.diningEligible = el.diningEligible.checked;
     save();
     render();
   });
