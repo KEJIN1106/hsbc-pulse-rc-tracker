@@ -10,6 +10,18 @@
 - 数据保存在当前设备浏览器的 localStorage，支持复制 JSON 备份。
 - 支持 iPhone Safari 添加到主屏幕，并注册离线缓存。
 
+## GitHub Pages
+
+`docs/` 是可直接发布到 GitHub Pages 的静态版本，不需要服务器。
+
+在 GitHub 仓库中进入 Settings → Pages，选择：
+
+- Source: Deploy from a branch
+- Branch: `master` 或 `main`
+- Folder: `/docs`
+
+保存后，打开 GitHub Pages 给出的链接，在 iPhone Safari 中点分享按钮并选择“添加到主屏幕”。
+
 ## 本地运行
 
 ```bash

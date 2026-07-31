@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <meta name="theme-color" content="#f4f7f5" />
+    <meta
+      name="description"
+      content="记录 HSBC Pulse 信用卡消费并自动计算迎新、赏世界、Pulse 额外和内地餐饮返现。"
+    />
+    <title>汇丰 Pulse 返现记录</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./app-icon.svg" />
+    <link rel="apple-touch-icon" href="./app-icon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">HSBC Pulse RC Tracker</p>
+          <h1>汇丰 Pulse 返现记录</h1>
+          <p class="hero-copy">
+            记录每一笔 Apple Pay、云闪付、内地餐饮和迎新消费，自动盯住
+            8,000、80,000、100,000 与每月餐饮上限。
+          </p>
+        </div>
+        <div class="total-panel" aria-label="预计奖赏钱">
+          <span>预计奖赏钱</span>
+          <strong id="totalReward">0 RC</strong>
+          <small id="totalSpend">已记录消费 0</small>
+        </div>
+      </section>
+
+      <section class="settings-strip" aria-label="卡片设置">
+        <label>
+          <span>开卡日期</span>
+          <input id="openDate" type="date" />
+        </label>
+        <label class="switch-row">
+          <input id="redHotRegistered" type="checkbox" />
+          <span>已登记最红自主奖赏「赏世界」</span>
+        </label>
+        <label class="switch-row">
+          <input id="diningEligible" type="checkbox" checked />
+          <span>计算内地餐饮额外 3%</span>
+        </label>
+      </section>
+
+      <section class="grid-two">
+        <form class="entry-panel" id="entryForm">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Add Spend</p>
+              <h2 id="formTitle">新增消费</h2>
+            </div>
+            <button class="ghost-button hidden" id="cancelEdit" type="button">取消</button>
+          </div>
+
+          <div class="field-grid">
+            <label>
+              <span>日期</span>
+              <input id="date" type="date" required />
+            </label>
+            <label>
+              <span>金额</span>
+              <input id="amount" inputmode="decimal" min="0" step="0.01" type="number" required />
+            </label>
+            <label>
+              <span>币种</span>
+              <select id="currency">
+                <option value="RMB">人民币</option>
+                <option value="HKD">港币</option>
+              </select>
+            </label>
+            <label>
+              <span>地区</span>
+              <select id="region">
+                <option value="mainland">中国内地</option>
+                <option value="macau">澳门</option>
+                <option value="hongkong">香港</option>
+                <option value="overseas">其他地区</option>
+              </select>
+            </label>
+            <label>
+              <span>类别</span>
+              <select id="category">
+                <option value="dining">餐饮</option>
+                <option value="shopping">购物</option>
+                <option value="travel">旅行</option>
+                <option value="other">其他</option>
+              </select>
+            </label>
+            <label>
+              <span>支付</span>
+              <select id="payment">
+                <option value="applepay">Apple Pay</option>
+                <option value="unionpay">云闪付</option>
+                <option value="other">其他</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="quick-row" aria-label="快速金额">
+            <button type="button" data-amount="50">50</button>
+            <button type="button" data-amount="88">88</button>
+            <button type="button" data-amount="120">120</button>
+            <button type="button" data-amount="300">300</button>
+            <button type="button" data-amount="800">800</button>
+            <button type="button" data-amount="1200">1200</button>
+          </div>
+
+          <label>
+            <span>备注</span>
+            <input id="note" placeholder="商户、订单或账单说明" />
+          </label>
+
+          <button class="primary-button" id="submitButton" type="submit">记录这一笔</button>
+          <p class="notice" id="notice">记录保存在本机浏览器。</p>
+        </form>
+
+        <section class="insight-panel" aria-label="关键提醒">
+          <div class="panel-title">
+            <div>
+              <p class="eyebrow">Checklist</p>
+              <h2>别漏掉这些</h2>
+            </div>
+            <button class="ghost-button" id="backupButton" type="button">备份</button>
+          </div>
+          <div class="task-list" id="taskList"></div>
+        </section>
+      </section>
+
+      <section class="progress-grid" aria-label="返现进度" id="progressGrid"></section>
+
+      <section class="summary-band">
+        <div class="metric">
+          <span>基础 0.4%</span>
+          <strong id="baseReward">0 RC</strong>
+        </div>
+        <div class="metric">
+          <span>迎新奖励</span>
+          <strong id="welcomeReward">0 RC</strong>
+        </div>
+        <div class="metric">
+          <span>内地餐饮 3%</span>
+          <strong id="diningReward">0 RC</strong>
+        </div>
+        <div class="metric">
+          <span>最佳姿势消费</span>
+          <strong id="bestPostureSpend">0</strong>
+        </div>
+      </section>
+
+      <section class="records-panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Records</p>
+            <h2>消费记录</h2>
+          </div>
+          <select id="filter">
+            <option value="all">全部</option>
+            <option value="welcome">迎新窗口</option>
+            <option value="best">最佳支付姿势</option>
+            <option value="dining">餐饮</option>
+          </select>
+        </div>
+        <div id="recordList"></div>
+      </section>
+
+      <section class="month-panel">
+        <div class="panel-title">
+          <div>
+            <p class="eyebrow">Dining</p>
+            <h2>每月餐饮上限</h2>
+          </div>
+          <span class="cap-badge">推广期上限 480 RC</span>
+        </div>
+        <div class="month-grid" id="monthGrid"></div>
+      </section>
+
+      <footer id="footerNote">
+        计算按你提供的规则：HKD/RMB 按 1:1 记录；最终入账以汇丰账单和活动条款为准。
+      </footer>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

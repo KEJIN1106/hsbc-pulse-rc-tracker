@@ -1,0 +1,19 @@
+{
+  "name": "汇丰 Pulse 返现记录",
+  "short_name": "Pulse RC",
+  "description": "记录 HSBC Pulse 信用卡消费并自动计算返现进度。",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#f4f7f5",
+  "theme_color": "#d71920",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./app-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
