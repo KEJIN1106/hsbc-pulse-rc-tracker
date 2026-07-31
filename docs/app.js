@@ -299,6 +299,13 @@ function categoryFromAiData(data) {
     : "other";
 }
 
+function paymentFromAiData(data) {
+  const source = `${data?.payment || ""} ${data?.merchant || ""} ${data?.note || ""}`;
+  if (/apple\s*pay/i.test(source)) return "applepay";
+  if (/(^|[^a-z])qr([^a-z]|$)/i.test(source)) return "unionpay";
+  return "other";
+}
+
 function normalizeAiReceiptItem(data) {
   const amount = Number(data?.amount);
   if (!Number.isFinite(amount) || amount <= 0) return null;
@@ -312,7 +319,7 @@ function normalizeAiReceiptItem(data) {
       : "mainland",
     category: categoryFromAiData(data),
     diningEligible: /meituan|美团/i.test(`${data?.merchant || ""} ${data?.note || ""}`),
-    payment: ["applepay", "unionpay", "other"].includes(data.payment) ? data.payment : "other",
+    payment: paymentFromAiData(data),
     merchant: typeof data.merchant === "string" ? data.merchant : "",
     confidence: Number(data.confidence || 0),
     note: typeof data.note === "string" ? data.note : "",

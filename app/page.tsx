@@ -415,6 +415,13 @@ function categoryFromAiData(data: Record<string, unknown>) {
     : "other";
 }
 
+function paymentFromAiData(data: Record<string, unknown>) {
+  const source = `${data.payment || ""} ${data.merchant || ""} ${data.note || ""}`;
+  if (/apple\s*pay/i.test(source)) return "applepay";
+  if (/(^|[^a-z])qr([^a-z]|$)/i.test(source)) return "unionpay";
+  return "other";
+}
+
 function normalizeAiReceiptItem(data: Record<string, unknown> | null | undefined) {
   if (!data) return null;
   const amount = Number(data?.amount);
@@ -429,9 +436,7 @@ function normalizeAiReceiptItem(data: Record<string, unknown> | null | undefined
       : "mainland",
     category: categoryFromAiData(data),
     diningEligible: /meituan|美团/i.test(`${data.merchant || ""} ${data.note || ""}`),
-    payment: ["applepay", "unionpay", "other"].includes(String(data.payment))
-      ? (data.payment as PaymentMethod)
-      : "other",
+    payment: paymentFromAiData(data),
     merchant: typeof data.merchant === "string" ? data.merchant : "",
     confidence: Number(data.confidence || 0),
     note: typeof data.note === "string" ? data.note : "",
