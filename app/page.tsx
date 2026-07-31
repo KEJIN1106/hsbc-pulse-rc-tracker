@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 type Region = "mainland" | "macau" | "hongkong" | "overseas";
 type Category = "dining" | "shopping" | "travel" | "other";
@@ -1081,7 +1081,23 @@ export default function Home() {
             label="内地餐饮额外 3%"
             value={analysis.diningReward}
             max={DINING_PROMO_REWARD_CAP}
-            detail="六个月合计；月满 1,200 后当月餐饮从第一元计 3%，月封顶 80"
+            valueLabel={`${formatRc(analysis.diningReward)} / ${formatRc(
+              DINING_PROMO_REWARD_CAP,
+            )} RC`}
+            detail={
+              <div className="dining-reward-detail">
+                <span className="dining-current">
+                  {currentMonth}：{formatRc(currentDiningMonth.reward)} RC
+                </span>
+                {analysis.diningMonths
+                  .filter(([key]) => key !== currentMonth)
+                  .map(([key, month]) => (
+                    <span className="dining-other" key={key}>
+                      {key}：{formatRc(month.reward)} RC
+                    </span>
+                  ))}
+              </div>
+            }
             tone="amber"
           />
           <ProgressCard
@@ -1200,13 +1216,15 @@ function ProgressCard({
   label,
   value,
   max,
+  valueLabel,
   detail,
   tone,
 }: {
   label: string;
   value: number;
   max: number;
-  detail: string;
+  valueLabel?: string;
+  detail: ReactNode;
   tone: "green" | "amber" | "red" | "blue";
 }) {
   return (
@@ -1214,7 +1232,7 @@ function ProgressCard({
       <div>
         <span>{label}</span>
         <strong>
-          {formatAmount(value)} / {formatAmount(max)}
+          {valueLabel ?? `${formatAmount(value)} / ${formatAmount(max)}`}
         </strong>
       </div>
       <div className="progress-track" aria-hidden="true">

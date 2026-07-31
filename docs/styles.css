@@ -348,6 +348,24 @@ select:focus {
   line-height: 1.1;
 }
 
+.dining-reward-detail {
+  display: grid;
+  gap: 4px;
+}
+
+.dining-reward-detail span {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.dining-reward-detail .dining-current {
+  font-size: 13px;
+}
+
+.dining-reward-detail .dining-other {
+  font-size: 11px;
+}
+
 .progress-track {
   height: 9px;
   overflow: hidden;

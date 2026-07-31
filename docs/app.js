@@ -632,11 +632,12 @@ function renderTask(className, title, text) {
 }
 
 function renderProgressCard(label, value, max, detail, tone) {
+  const valueLabel = arguments.length > 5 ? arguments[5] : `${formatAmount(value)} / ${formatAmount(max)}`;
   return `
     <article class="progress-card ${tone}">
       <div>
         <span>${label}</span>
-        <strong>${formatAmount(value)} / ${formatAmount(max)}</strong>
+        <strong>${valueLabel}</strong>
       </div>
       <div class="progress-track" aria-hidden="true">
         <span style="width: ${progressPercent(value, max)}%"></span>
@@ -644,6 +645,20 @@ function renderProgressCard(label, value, max, detail, tone) {
       <small>${detail}</small>
     </article>
   `;
+}
+
+function renderDiningRewardDetail(analysis, currentMonth, currentDiningMonth) {
+  const otherMonths = analysis.diningMonths
+    .filter(([key]) => key !== currentMonth)
+    .map(
+      ([key, month]) =>
+        `<span class="dining-other">${key}：${formatRc(month.reward)} RC</span>`,
+    )
+    .join("");
+
+  return `<div class="dining-reward-detail"><span class="dining-current">${currentMonth}：${formatRc(
+    currentDiningMonth.reward,
+  )} RC</span>${otherMonths}</div>`;
 }
 
 function renderEmpty(title, text) {
@@ -717,8 +732,9 @@ function render() {
       "内地餐饮额外 3%",
       analysis.diningReward,
       DINING_PROMO_REWARD_CAP,
-      "六个月合计；月满 1,200 后当月餐饮从第一元计 3%，月封顶 80",
+      renderDiningRewardDetail(analysis, currentMonth, currentDiningMonth),
       "amber",
+      `${formatRc(analysis.diningReward)} / ${formatRc(DINING_PROMO_REWARD_CAP)} RC`,
     ),
     renderProgressCard(
       "Pulse 额外 2%",
