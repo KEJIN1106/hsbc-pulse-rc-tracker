@@ -106,8 +106,16 @@
 
           <div class="scan-box">
             <input id="receiptImage" class="hidden" type="file" accept="image/*" />
-            <button class="ghost-button" id="scanButton" type="button">识别截图预填</button>
-            <span id="scanResult">本地 OCR 识别，不会自动保存。</span>
+            <input id="aiReceiptImage" class="hidden" type="file" accept="image/*" />
+            <label class="scan-endpoint">
+              <span>AI 接口 URL</span>
+              <input id="aiEndpoint" placeholder="https://你的-worker.workers.dev/receipt" type="url" />
+            </label>
+            <div class="scan-actions">
+              <button class="ghost-button" id="aiScanButton" type="button">AI 识别截图</button>
+              <button class="ghost-button" id="scanButton" type="button">本地 OCR</button>
+            </div>
+            <span id="scanResult">AI 更准；本地 OCR 免费但容易误判。识别后请确认再保存。</span>
           </div>
 
           <div class="quick-row" aria-label="快速金额">

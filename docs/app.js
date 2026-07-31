@@ -1,4 +1,5 @@
 const STORAGE_KEY = "hsbc-pulse-cashback-v1";
+const AI_ENDPOINT_STORAGE_KEY = "hsbc-pulse-ai-endpoint-v1";
 const BASE_RATE = 0.004;
 const RED_HOT_EXTRA_RATE = 0.02;
 const PULSE_EXTRA_RATE = 0.02;
@@ -47,6 +48,9 @@ const ids = [
   "redHotEligible",
   "transactionDiningEligible",
   "receiptImage",
+  "aiReceiptImage",
+  "aiEndpoint",
+  "aiScanButton",
   "scanButton",
   "scanResult",
   "note",
@@ -278,6 +282,51 @@ function setInput(transaction) {
   el.note.value = transaction.note || "";
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("读取图片失败。"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function normalizeAiReceipt(raw) {
+  const data = raw?.result || raw?.receipt || raw;
+  const amount = Number(data?.amount);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  return {
+    date: typeof data.date === "string" ? data.date : "",
+    amount,
+    currency: data.currency === "HKD" ? "HKD" : "RMB",
+    region: ["mainland", "macau", "hongkong", "overseas"].includes(data.region)
+      ? data.region
+      : "mainland",
+    category: ["dining", "shopping", "travel", "other"].includes(data.category)
+      ? data.category
+      : "other",
+    payment: ["applepay", "unionpay", "other"].includes(data.payment) ? data.payment : "other",
+    merchant: typeof data.merchant === "string" ? data.merchant : "",
+    confidence: Number(data.confidence || 0),
+    note: typeof data.note === "string" ? data.note : "",
+  };
+}
+
+function prefillReceipt(parsed, sourceLabel) {
+  setInput({
+    date: parsed.date || el.date.value || todayString(),
+    amount: parsed.amount,
+    currency: parsed.currency,
+    region: parsed.region,
+    category: parsed.category,
+    payment: parsed.payment,
+    redHotEligible: el.redHotEligible.checked,
+    diningEligible: el.transactionDiningEligible.checked,
+    note: parsed.merchant ? `${sourceLabel}：${parsed.merchant}` : sourceLabel,
+  });
+}
+
 function normalizeOcrText(text) {
   return text
     .replace(/[，]/g, ",")
@@ -412,17 +461,7 @@ async function scanReceiptImage(file) {
       return;
     }
 
-    setInput({
-      date: parsed.date || el.date.value || todayString(),
-      amount: parsed.amount,
-      currency: parsed.currency,
-      region: parsed.region,
-      category: parsed.category,
-      payment: parsed.payment,
-      redHotEligible: el.redHotEligible.checked,
-      diningEligible: el.transactionDiningEligible.checked,
-      note: parsed.merchant ? `截图识别：${parsed.merchant}` : "截图识别",
-    });
+    prefillReceipt(parsed, "本地OCR");
     setScanStatus(`已预填：${parsed.currency} ${formatAmount(parsed.amount)}，请确认后保存。`);
     setNotice("OCR 已预填表单，请检查日期、金额、类别和支付方式后再保存。");
   } catch (error) {
@@ -431,6 +470,52 @@ async function scanReceiptImage(file) {
   } finally {
     el.scanButton.disabled = false;
     el.receiptImage.value = "";
+  }
+}
+
+async function scanReceiptWithAi(file) {
+  if (!file) return;
+  const endpoint = el.aiEndpoint.value.trim();
+  if (!endpoint) {
+    setScanStatus("请先填写 Cloudflare Worker 的 AI 接口 URL。");
+    setNotice("AI 识别需要后端代理 URL，API Key 不能放在网页里。");
+    return;
+  }
+
+  if (file.size > 8 * 1024 * 1024) {
+    setScanStatus("图片超过 8MB，请先裁剪或压缩。");
+    return;
+  }
+
+  el.aiScanButton.disabled = true;
+  setScanStatus("正在上传给 AI 识别...");
+  setNotice("AI 只会预填表单，请确认后再保存。");
+
+  try {
+    localStorage.setItem(AI_ENDPOINT_STORAGE_KEY, endpoint);
+    const image = await fileToDataUrl(file);
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image }),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(payload?.error || `AI 接口错误 ${response.status}`);
+    }
+    const parsed = normalizeAiReceipt(payload);
+    if (!parsed) throw new Error("AI 没有返回有效金额。");
+
+    prefillReceipt(parsed, "AI识别");
+    const confidence = parsed.confidence ? `，置信度 ${Math.round(parsed.confidence * 100)}%` : "";
+    setScanStatus(`AI 已预填：${parsed.currency} ${formatAmount(parsed.amount)}${confidence}`);
+    setNotice("AI 已预填表单，请检查日期、金额、类别和支付方式后再保存。");
+  } catch (error) {
+    setScanStatus(error instanceof Error ? error.message : "AI 识别失败。");
+    setNotice("AI 识别失败，可以改用本地 OCR 或手动录入。");
+  } finally {
+    el.aiScanButton.disabled = false;
+    el.aiReceiptImage.value = "";
   }
 }
 
@@ -619,6 +704,11 @@ function escapeHtml(value) {
 }
 
 function bindEvents() {
+  el.aiEndpoint.value = localStorage.getItem(AI_ENDPOINT_STORAGE_KEY) || "";
+  el.aiEndpoint.addEventListener("change", () => {
+    localStorage.setItem(AI_ENDPOINT_STORAGE_KEY, el.aiEndpoint.value.trim());
+  });
+
   el.openDate.addEventListener("change", () => {
     state.settings.openDate = el.openDate.value;
     save();
@@ -635,8 +725,16 @@ function bindEvents() {
     el.receiptImage.click();
   });
 
+  el.aiScanButton.addEventListener("click", () => {
+    el.aiReceiptImage.click();
+  });
+
   el.receiptImage.addEventListener("change", () => {
     scanReceiptImage(el.receiptImage.files?.[0]);
+  });
+
+  el.aiReceiptImage.addEventListener("change", () => {
+    scanReceiptWithAi(el.aiReceiptImage.files?.[0]);
   });
 
   el.entryForm.addEventListener("submit", (event) => {
