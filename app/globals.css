@@ -234,6 +234,24 @@ select:focus {
   margin: 12px 0;
 }
 
+.scan-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 10px;
+  background: #f7faf8;
+  border: 1px dashed #c8d4ce;
+  border-radius: 8px;
+}
+
+.scan-box span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .quick-row button,
 .ghost-button,
 .record-actions button {
@@ -499,6 +517,10 @@ footer {
 
   .quick-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .scan-box {
+    grid-template-columns: 1fr;
   }
 
   .record {

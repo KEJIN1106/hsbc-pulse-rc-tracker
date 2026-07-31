@@ -104,6 +104,12 @@
             </label>
           </div>
 
+          <div class="scan-box">
+            <input id="receiptImage" class="hidden" type="file" accept="image/*" />
+            <button class="ghost-button" id="scanButton" type="button">识别截图预填</button>
+            <span id="scanResult">本地 OCR 识别，不会自动保存。</span>
+          </div>
+
           <div class="quick-row" aria-label="快速金额">
             <button type="button" data-amount="50">50</button>
             <button type="button" data-amount="88">88</button>
