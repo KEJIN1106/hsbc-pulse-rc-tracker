@@ -20,24 +20,37 @@ function extractOutputText(response) {
   if (typeof response.output_text === "string") return response.output_text;
   const chunks = [];
   for (const item of response.output || []) {
+    if (typeof item.content === "string") chunks.push(item.content);
     for (const content of item.content || []) {
       if (content.type === "output_text" && content.text) {
-        chunks.push(content.text);
+        chunks.push(
+          typeof content.text === "string" ? content.text : JSON.stringify(content.text),
+        );
       } else if (typeof content.text === "string") {
         chunks.push(content.text);
+      } else if (content.text?.value) {
+        chunks.push(content.text.value);
+      } else if (content.json) {
+        chunks.push(JSON.stringify(content.json));
       }
     }
   }
   return chunks.join("\n");
 }
 
-function firstJsonObject(text) {
-  const start = text.indexOf("{");
+function firstJsonValue(text) {
+  const objectStart = text.indexOf("{");
+  const arrayStart = text.indexOf("[");
+  const starts = [objectStart, arrayStart].filter((index) => index >= 0);
+  if (!starts.length) return "";
+  const start = Math.min(...starts);
   if (start < 0) return "";
 
   let depth = 0;
   let inString = false;
   let escaped = false;
+  const open = text[start];
+  const close = open === "{" ? "}" : "]";
 
   for (let index = start; index < text.length; index += 1) {
     const char = text[index];
@@ -55,9 +68,9 @@ function firstJsonObject(text) {
 
     if (char === '"') {
       inString = true;
-    } else if (char === "{") {
+    } else if (char === open) {
       depth += 1;
-    } else if (char === "}") {
+    } else if (char === close) {
       depth -= 1;
       if (depth === 0) return text.slice(start, index + 1);
     }
@@ -67,13 +80,30 @@ function firstJsonObject(text) {
 }
 
 function parseJsonObject(text) {
+  if (!text.trim()) throw new Error("AI response was empty");
   try {
     return JSON.parse(text);
   } catch {
-    const objectText = firstJsonObject(text);
-    if (!objectText) throw new Error("AI did not return JSON");
-    return JSON.parse(objectText);
+    const jsonText = firstJsonValue(text);
+    if (!jsonText) throw new Error("AI did not return JSON");
+    return JSON.parse(jsonText);
   }
+}
+
+function summarizeOpenAiResponse(response) {
+  if (!response) return null;
+  return {
+    status: response.status,
+    incomplete_details: response.incomplete_details,
+    output: (response.output || []).map((item) => ({
+      type: item.type,
+      role: item.role,
+      status: item.status,
+      content_types: Array.isArray(item.content)
+        ? item.content.map((content) => content.type || typeof content)
+        : typeof item.content,
+    })),
+  };
 }
 
 function receiptCategory(receipt) {
@@ -108,13 +138,15 @@ function normalizeReceipt(receipt) {
 }
 
 function normalizeReceipts(payload) {
-  const source = Array.isArray(payload.transactions)
-    ? payload.transactions
-    : Array.isArray(payload.receipts)
-      ? payload.receipts
-      : Array.isArray(payload.results)
-        ? payload.results
-        : [payload];
+  const source = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload.transactions)
+      ? payload.transactions
+      : Array.isArray(payload.receipts)
+        ? payload.receipts
+        : Array.isArray(payload.results)
+          ? payload.results
+          : [payload];
 
   return source
     .map((receipt) => {
@@ -212,7 +244,7 @@ Important:
           },
         ],
         text: { format: { type: "json_object" } },
-        max_output_tokens: 600,
+        max_output_tokens: 1600,
       }),
     });
 
@@ -237,6 +269,7 @@ Important:
         {
           error: error instanceof Error ? error.message : "Could not parse AI response",
           raw: extractOutputText(openaiJson).slice(0, 1000),
+          response: summarizeOpenAiResponse(openaiJson),
         },
         502,
       );
